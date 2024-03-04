@@ -150,7 +150,6 @@ long findZeroInString(char* string, size_t len)
     // -1 to return index of last character before \0
     index = index - 1;
 
-
     if(index < 0)
     {
         if(index == -1) { return 0; }
@@ -264,15 +263,9 @@ long findBlankCharInString(char* string, size_t len)
     size_t index = 0;
     for(; index < len ; index++)
     {
-        if( string[index] == ' ' || string[index] == '\t')
+        if(string[index] == ' ' || string[index] == '\t' || string[index] == '\0' || string[index] == '\n')
         { 
-            return index - 1;
-        }
-
-        if(string[index] == '\0' || string[index] == '\n')
-        {
-            // Character was not found
-            return -1;
+            return index;
         }
     }
 
@@ -280,13 +273,19 @@ long findBlankCharInString(char* string, size_t len)
     return -1;
 }
 
+/**
+ * @brief 
+ * 
+ * @param string 
+ * @param len 
+ * @return long 
+ */
 long skipBlankCharsInString(char* string, size_t len)
 {
     size_t index = 0;
-    printf("%s\n", string);
     for(; index < len ; index++)
     {
-        if( string[index] != ' ' && string[index] != '\t')
+        if(! (string[index] == ' ' || string[index] == '\t'))
         { 
             return index;
         }
@@ -311,43 +310,28 @@ long skipBlankCharsInString(char* string, size_t len)
  */
 void getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize)
 {
-        printf("DEBUG: %p\n", (void*)block->start);
-    printf("DEBUG: %p\n", (void*)block->end);
-    printf("DEBUG: %ld\n", block->len);
-
     if(block == NULL || startOfLastWord == NULL || bufferSize <= 0)
     {
         errHandling("Invalid input variables in fuction getWord()", 1); // TODO: change err code
     }
 
     size_t index = skipBlankCharsInString(startOfLastWord, bufferSize);
-    printf("index: %ld\n", index);
     block->start = &(startOfLastWord[index]);
 
     index = findBlankCharInString(block->start, bufferSize - block->len);
-    printf("index: %ld\n", index);
     block->end = &(block->start[index]);
     block->len = index;
-    printf("index block: %ld\n", block->len);
-
-        printf("DEBUG: %p\n", (void*)block->start);
-    printf("DEBUG: %p\n", (void*)block->end);
-    printf("DEBUG: %ld\n", block->len);
 }
 
 void printByteBlock(BytesBlock* block)
 {
-    // printf("DEBUG: %p\n", (void*)block->start);
-    // printf("DEBUG: %p\n", (void*)block->end);
-    // printf("DEBUG: %ld\n", block->len);
-
-    for(size_t i = 0; i < block->len; i++)
+    for(size_t i = 0; i <= block->len; i++)
     {
         printf("%c", (block->start)[i]);
-        // if(&(block->start[i]) == block->end)
-        // {
-            // break;
-        // }
+        if(&(block->start[i]) == block->end)
+        {
+            break;
+        }
     }
 
     printf("\n");
@@ -372,8 +356,8 @@ void commandHandler(char* buffer, size_t bufferSize)
 
     if(strncmp(cmd.start, "/auth", cmd.len) == 0)
     {
-        cmd.end = &(buffer[4]);
-        cmd.len = 4;
+        cmd.end = &(buffer[5]);
+        cmd.len = 5;
         getWord(&first, cmd.end, bufferSize - (cmd.len));
         getWord(&second, first.end, bufferSize - (cmd.len + first.len));
         getWord(&third, second.end, bufferSize - (cmd.len + first.len + second.len));
@@ -401,15 +385,16 @@ void commandHandler(char* buffer, size_t bufferSize)
     switch (type)
     {
     case AUTH:
-        printByteBlock(&first);
-        printByteBlock(&second);
-        printByteBlock(&third);
+        // printByteBlock(&first);
+        // printByteBlock(&second);
+        // printByteBlock(&third);
         break;
     case JOIN:
     case RENAME:
+        // printByteBlock(&first);
+        // printf("len:%ld\n", first.len);
     case HELP:
     case PLAIN_MSG:
-        printByteBlock(&first);
         break;
     }
 }
@@ -453,7 +438,9 @@ int main(int argc, char* argv[])
     do 
     {
         size_t bytesLoaded = loadBuffer(&buffer, &bufferSize);
+        commandHandler(buffer, bytesLoaded);
 
+        break;
         // send buffer to the server 
         int bytesTx = sendto(clientSocket, buffer, bytesLoaded, flags, serverAddress, addressSize);
 
@@ -462,8 +449,6 @@ int main(int argc, char* argv[])
             fprintf(stderr, "ERROR: Sending was not successful\n");
             exit(1); // TODO: error code change
         }
-
-        commandHandler(buffer, bufferSize);
 
         // increase number of messages recevied
         numOfMsgs++;
