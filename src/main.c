@@ -163,7 +163,6 @@ long findZeroInString(char* string, size_t len)
 
 typedef struct BytesBlock {
     char* start; // pointer to the starting character of the block
-    char* end; // poitner to the ending character of the block
     size_t len; // length of the block
 } BytesBlock;
 
@@ -182,6 +181,7 @@ typedef struct BytesBlock {
  * @param buffer 
  * @param bufferSize 
  */
+/*
 void commandLookUp(char* buffer, size_t bufferSize)
 {
     // Message type is always first (0th) received byte
@@ -242,7 +242,7 @@ void commandLookUp(char* buffer, size_t bufferSize)
         break;
     }
 }
-
+*/
 
 // ----------------------------------------------------------------------------
 //
@@ -315,16 +315,15 @@ void getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize)
 
     size_t index = skipBlankCharsInString(startOfLastWord, bufferSize);
     // +1 because 
-    block->start = &(startOfLastWord[index + 1]);
+    block->start = &(startOfLastWord[index]);
 
     index = findBlankCharInString(block->start, bufferSize - block->len);
-    block->end = &(block->start[index - 1]);
     block->len = index;
 }
 
 void printByteBlock(BytesBlock* block, int hex)
 {
-    for(size_t i = 0; /*i <= block->len*/ 1; i++)
+    for(size_t i = 0; i <= block->len; i++)
     {
         if(hex)
         {
@@ -333,11 +332,6 @@ void printByteBlock(BytesBlock* block, int hex)
         else
         {
             printf("%c", (block->start)[i]);
-        }
-
-        if(&(block->start[i]) == block->end)
-        {
-            break;
         }
     }
 
@@ -355,38 +349,34 @@ typedef enum CommandType {AUTH, JOIN, RENAME, HELP, PLAIN_MSG} cmd_t;
 cmd_t commandHandler(char* buffer, size_t bufferSize, BytesBlock commnads[4])
 {
     // size_t index = findBlankCharInString(buffer, bufferSize);
-    BytesBlock cmd = {.start=buffer, .end=NULL, .len=0};
+    BytesBlock cmd = {.start=buffer, .len=0};
 
-    BytesBlock first = {NULL, NULL, 0}, second = {NULL, NULL, 0}, third = {NULL, NULL, 0};
+    BytesBlock first = {NULL, 0}, second = {NULL, 0}, third = {NULL, 0};
 
     cmd_t type;
 
     if(strncmp(cmd.start, "/auth", cmd.len) == 0)
     {
-        cmd.end = &(buffer[5]);
         cmd.len = 5;
-        getWord(&first, cmd.end, bufferSize - (cmd.len));
-        getWord(&second, first.end, bufferSize - (cmd.len + first.len));
-        getWord(&third, second.end, bufferSize - (cmd.len + first.len + second.len));
+        getWord(&first, &(cmd.start[cmd.len]), bufferSize - (cmd.len));
+        getWord(&second, &(first.start[cmd.len-1]), bufferSize - (cmd.len + first.len));
+        getWord(&third, &(second.start[cmd.len-1]), bufferSize - (cmd.len + first.len + second.len));
         type = AUTH;
     }
     else if(strncmp(cmd.start, "/join", cmd.len) == 0)
     {
-        cmd.end = &(buffer[4]);
         cmd.len = 5;
-        getWord(&first, cmd.end, bufferSize - (cmd.len));
+        getWord(&first, &(cmd.start[cmd.len]), bufferSize - (cmd.len));
         type = JOIN;
     }
     else if(strncmp(cmd.start, "/rename", cmd.len) == 0)
     {
-        cmd.end = &(buffer[6]);
         cmd.len = 7;
-        getWord(&first, cmd.end, bufferSize - (cmd.len));
+        getWord(&first, &(cmd.start[cmd.len]), bufferSize - (cmd.len));
         type = RENAME;
     }
     else if(strncmp(cmd.start, "/help", cmd.len) == 0)
     {
-        cmd.end = &(buffer[4]);
         cmd.len = 5;
         type = HELP;
     }
@@ -400,22 +390,6 @@ cmd_t commandHandler(char* buffer, size_t bufferSize, BytesBlock commnads[4])
     commnads[2] = second;
     commnads[3] = third;
 
-    // switch (type)
-    // {
-    // case AUTH:
-    //     // printByteBlock(&first);
-    //     // printByteBlock(&second);
-    //     // printByteBlock(&third);
-    //     break;
-    // case JOIN:
-    // case RENAME:
-    //     // printByteBlock(&first);
-    //     // printf("len:%ld\n", first.len);
-    // case HELP:
-    // case PLAIN_MSG:
-    //     break;
-    // }
-
     return type;
 }
 
@@ -425,6 +399,7 @@ cmd_t commandHandler(char* buffer, size_t bufferSize, BytesBlock commnads[4])
 
 void assembleProtocol(cmd_t type, BytesBlock commands[4])
 {
+
     if(type){}
     printByteBlock(&(commands[0]), 0);
     printByteBlock(&(commands[1]), 0);
@@ -472,9 +447,9 @@ int main(int argc, char* argv[])
     int flags = 0; //TODO: check if some usefull flags could be done
     char* buffer = NULL; // variable to store client input to be send to server
     size_t bufferSize = 0; // size of buffer to correctly manage memory
+    unsigned numOfMsgs = 0; // counter of messages send
+    cmd_t cmdType; // variable to store current command typed by user
 
-    unsigned numOfMsgs = 0;
-    cmd_t cmdType;
     BytesBlock commands[4];
     do 
     {
