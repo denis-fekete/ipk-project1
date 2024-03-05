@@ -162,9 +162,9 @@ long findZeroInString(char* string, size_t len)
 }
 
 typedef struct BytesBlock {
-    char* start;
-    char* end;
-    size_t len;
+    char* start; // pointer to the starting character of the block
+    char* end; // poitner to the ending character of the block
+    size_t len; // length of the block
 } BytesBlock;
 
 
@@ -241,8 +241,6 @@ void commandLookUp(char* buffer, size_t bufferSize)
         exit(1); 
         break;
     }
-
-    
 }
 
 
@@ -316,18 +314,27 @@ void getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize)
     }
 
     size_t index = skipBlankCharsInString(startOfLastWord, bufferSize);
-    block->start = &(startOfLastWord[index]);
+    // +1 because 
+    block->start = &(startOfLastWord[index + 1]);
 
     index = findBlankCharInString(block->start, bufferSize - block->len);
-    block->end = &(block->start[index]);
+    block->end = &(block->start[index - 1]);
     block->len = index;
 }
 
-void printByteBlock(BytesBlock* block)
+void printByteBlock(BytesBlock* block, int hex)
 {
-    for(size_t i = 0; i <= block->len; i++)
+    for(size_t i = 0; /*i <= block->len*/ 1; i++)
     {
-        printf("%c", (block->start)[i]);
+        if(hex)
+        {
+            printf("%x ", (block->start)[i]);
+        }
+        else
+        {
+            printf("%c", (block->start)[i]);
+        }
+
         if(&(block->start[i]) == block->end)
         {
             break;
@@ -345,7 +352,7 @@ typedef enum CommandType {AUTH, JOIN, RENAME, HELP, PLAIN_MSG} cmd_t;
  * @param buffer 
  * @param bufferSize 
  */
-void commandHandler(char* buffer, size_t bufferSize)
+cmd_t commandHandler(char* buffer, size_t bufferSize, BytesBlock commnads[4])
 {
     // size_t index = findBlankCharInString(buffer, bufferSize);
     BytesBlock cmd = {.start=buffer, .end=NULL, .len=0};
@@ -365,16 +372,22 @@ void commandHandler(char* buffer, size_t bufferSize)
     }
     else if(strncmp(cmd.start, "/join", cmd.len) == 0)
     {
+        cmd.end = &(buffer[4]);
+        cmd.len = 5;
         getWord(&first, cmd.end, bufferSize - (cmd.len));
         type = JOIN;
     }
     else if(strncmp(cmd.start, "/rename", cmd.len) == 0)
     {
+        cmd.end = &(buffer[6]);
+        cmd.len = 7;
         getWord(&first, cmd.end, bufferSize - (cmd.len));
         type = RENAME;
     }
     else if(strncmp(cmd.start, "/help", cmd.len) == 0)
     {
+        cmd.end = &(buffer[4]);
+        cmd.len = 5;
         type = HELP;
     }
     else
@@ -382,21 +395,47 @@ void commandHandler(char* buffer, size_t bufferSize)
         type = PLAIN_MSG;
     }
 
-    switch (type)
-    {
-    case AUTH:
-        // printByteBlock(&first);
-        // printByteBlock(&second);
-        // printByteBlock(&third);
-        break;
-    case JOIN:
-    case RENAME:
-        // printByteBlock(&first);
-        // printf("len:%ld\n", first.len);
-    case HELP:
-    case PLAIN_MSG:
-        break;
-    }
+    commnads[0] = cmd;
+    commnads[1] = first;
+    commnads[2] = second;
+    commnads[3] = third;
+
+    // switch (type)
+    // {
+    // case AUTH:
+    //     // printByteBlock(&first);
+    //     // printByteBlock(&second);
+    //     // printByteBlock(&third);
+    //     break;
+    // case JOIN:
+    // case RENAME:
+    //     // printByteBlock(&first);
+    //     // printf("len:%ld\n", first.len);
+    // case HELP:
+    // case PLAIN_MSG:
+    //     break;
+    // }
+
+    return type;
+}
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
+void assembleProtocol(cmd_t type, BytesBlock commands[4])
+{
+    if(type){}
+    printByteBlock(&(commands[0]), 0);
+    printByteBlock(&(commands[1]), 0);
+    printByteBlock(&(commands[2]), 0);
+    printByteBlock(&(commands[3]), 0);
+
+    printf("\n");
+    printByteBlock(&(commands[0]), 1);
+    printByteBlock(&(commands[1]), 1);
+    printByteBlock(&(commands[2]), 1);
+    printByteBlock(&(commands[3]), 1);
 }
 
 // ----------------------------------------------------------------------------
@@ -435,12 +474,14 @@ int main(int argc, char* argv[])
     size_t bufferSize = 0; // size of buffer to correctly manage memory
 
     unsigned numOfMsgs = 0;
+    cmd_t cmdType;
+    BytesBlock commands[4];
     do 
     {
         size_t bytesLoaded = loadBuffer(&buffer, &bufferSize);
-        commandHandler(buffer, bytesLoaded);
+        cmdType = commandHandler(buffer, bytesLoaded, commands);
 
-        break;
+        assembleProtocol(cmdType, commands);
         // send buffer to the server 
         int bytesTx = sendto(clientSocket, buffer, bytesLoaded, flags, serverAddress, addressSize);
 
