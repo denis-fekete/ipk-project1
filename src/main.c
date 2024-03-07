@@ -2,44 +2,18 @@
 // #include "netinet/tcp.h"
 // #include "netinet/udp.h"
 // #include "netinet/ip_icmp.h"
-#include "arpa/inet.h"
-#include "sys/socket.h"
-#include "netdb.h"
 
-#include "stdio.h"
-#include "stdlib.h"
-#include "string.h"
+
 
 #include "getopt.h"
 #include "../tests/clientXserver.h"
 
-// typedef char byte;
-#define byte char
+#include "customtypes.h"
+#include "buffer.h"
+#include "utils.h"
+#include "networkCom.h"
 
-int errHandling(const char* msg, int errorCode)
-{
-    fprintf(stderr, "ERROR: %s\n", msg);
-    exit(errorCode);
-    return 0;
-}
 
-enum Protocols {UDP, TCP};
-
-int getSocket(enum Protocols protocol)
-{   
-    int family;
-    switch (protocol)
-    {
-        case UDP: family = SOCK_DGRAM; break; 
-        case TCP: family = SOCK_STREAM; break;
-        default: errHandling("Unknown protocol passed to function get socket)", -1); 
-    }
-
-    int newSocket = socket(family, AF_INET, 0);
-    if(newSocket < 0) { errHandling("Socket creation failed", 1); /*TODO:*/ }
-
-    return newSocket;
-}
 
 void processArguments(int argc, char* argv[])
 {
@@ -47,133 +21,6 @@ void processArguments(int argc, char* argv[])
     if(argc || argv) {}
 }
 
-struct sockaddr_in findServer(const char* serverHostname, uint16_t serverPort)
-{
-    struct hostent* server = gethostbyname(serverHostname);
-    if(server == NULL)
-    {
-        fprintf(stderr, "ERROR: No such host %s\n", serverHostname);
-        exit(1); //TODO:
-    }
-
-    struct sockaddr_in serverAddress;
-    memset(&serverAddress, 0, sizeof(serverAddress));
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(serverPort);
-    memcpy(&serverAddress.sin_addr.s_addr, server->h_addr_list[0], server->h_length);
-    
-    #ifdef DEBUG
-    printf("INFO: Server socket %s : %d \n", inet_ntoa(serverAddress.sin_addr), ntohs(serverAddress.sin_port));
-    #endif
-    
-    // struct sockaddr* address = (struct sockaddr*) &serverAddress;
-    // int addressSize = sizeof(serverAddress);
-
-    // return address;
-    return serverAddress;
-}
-
-int isEndingCharacter(char input)
-{
-    // 3 = Ctrl-D, 4 = Ctrl-C
-    if(input == EOF || input == '\n' || input == 3 || input == 4)
-    {
-        return 0;
-    }
-
-    return 1;
-}
-
-/**
- * @brief Fills buffer with characters from stdin.
- * 
- * Fills buffer character by character until EOF is found.
- * If buffer is running out of space, it will be resized
- * 
- * @param buffer Pointer to the buffer. Can be inputed as NULL, however correct buffer size
- * is required
- * @param bufferSize Pointer size of provided buffer
- */
-size_t loadBuffer(char** buffer, size_t* bufferSize)
-{
-    char c = getc(stdin);
-    
-    size_t i = 0;
-    for(; isEndingCharacter(c) ; i++)
-    {
-        
-        // resize buffer if smaller than num. of loaded characters or zero
-        if(*buffer == NULL || *bufferSize <= 0 || (*bufferSize) < i) 
-        {
-            // Get size of new buffer
-            const size_t sizeToAllocate = (*bufferSize <= 0)? 512 : *bufferSize * 2;
-            // Realloc buffer
-            char* tmp = realloc(*buffer, sizeToAllocate);
-            // Check for failed memory reallocation
-            if(tmp == NULL)
-            {
-                fprintf(stderr, "ERROR: Realloc failed");
-                exit(1); // TODO: error code change
-            }
-            // Save new value to buffer and bufferSize
-            *bufferSize = sizeToAllocate;
-            *buffer = tmp;
-        }
-
-        (*buffer)[i] = c;
-        c = getc(stdin);
-    }
-
-    // Add 0 to the end of string
-    (*buffer)[i] = '\0';
-
-    return i;
-}
-
-
-// ----------------------------------------------------------------------------
-//
-// ----------------------------------------------------------------------------
-
-/**
- * @brief Returns index of last character before '\0' character in string
- * 
- * @param string Pointer to the string
- * @param len Length of the string
- * @return long Index of last character before \0
- */
-long findZeroInString(char* string, size_t len)
-{
-    long index = 0;
-    for(; ((size_t)index < len) && (string[index] != '\0') ; index++) {}
-
-    // -1 to return index of last character before \0
-    index = index - 1;
-
-    if(index < 0)
-    {
-        if(index == -1) { return 0; }
-        else
-        {
-            return errHandling("Intrnal error in findZeroInString()", 1); // TODO: change error code
-        }
-    }
-    else { return index; }
-}
-
-typedef struct BytesBlock {
-    char* start; // pointer to the starting character of the block
-    size_t len; // length of the block
-} BytesBlock;
-
-
-#define MSG_TYPE_CONFIRM 0x00
-#define MSG_TYPE_REPLY 0x01
-#define MSG_TYPE_AUTH 0x02
-#define MSG_TYPE_JOIN 0x03
-#define MSG_TYPE_MSG 0x04
-#define MSG_TYPE_ERR 0xFE
-#define MSG_TYPE_BYE 0xFF
 
 /**
  * @brief Breaks received protocol IPK2024 (from variable buffer) into parts  
@@ -249,107 +96,15 @@ void commandLookUp(char* buffer, size_t bufferSize)
 // ----------------------------------------------------------------------------
 
 /**
- * @brief Finds first blank character (spaces ' ' and tabulators '\t') in string and returns index 
- * of last character before blank character
- * 
- * @param string Input string to be searched in
- * @param len Length of string
- * @return long Index in string
- */
-long findBlankCharInString(char* string, size_t len)
-{
-    size_t index = 0;
-    for(; index < len ; index++)
-    {
-        if(string[index] == ' ' || string[index] == '\t' || string[index] == '\0' || string[index] == '\n')
-        { 
-            return index;
-        }
-    }
-
-    // Character was not found
-    return -1;
-}
-
-/**
- * @brief 
- * 
- * @param string 
- * @param len 
- * @return long 
- */
-long skipBlankCharsInString(char* string, size_t len)
-{
-    size_t index = 0;
-    for(; index < len ; index++)
-    {
-        if(! (string[index] == ' ' || string[index] == '\t'))
-        { 
-            return index;
-        }
-
-        if(string[index] == '\0' || string[index] == '\n')
-        {
-            // Character was not found
-            return -1;
-        }
-    }
-
-    // Character was not found
-    return -1;
-}
-
-/**
- * @brief Fills BytesBlock variable from last word found 
- * Skips all blank characters (spaces and tabs) 
- * @param block Variable of initialized 
- * @param startOfLastWord 
- * @param bufferSize 
- */
-void getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize)
-{
-    if(block == NULL || startOfLastWord == NULL || bufferSize <= 0)
-    {
-        errHandling("Invalid input variables in fuction getWord()", 1); // TODO: change err code
-    }
-
-    size_t index = skipBlankCharsInString(startOfLastWord, bufferSize);
-    // +1 because 
-    block->start = &(startOfLastWord[index]);
-
-    index = findBlankCharInString(block->start, bufferSize - block->len);
-    block->len = index;
-}
-
-void printByteBlock(BytesBlock* block, int hex)
-{
-    for(size_t i = 0; i <= block->len; i++)
-    {
-        if(hex)
-        {
-            printf("%x ", (block->start)[i]);
-        }
-        else
-        {
-            printf("%c", (block->start)[i]);
-        }
-    }
-
-    printf("\n");
-}
-
-typedef enum CommandType {AUTH, JOIN, RENAME, HELP, PLAIN_MSG} cmd_t;
-
-/**
  * @brief 
  * 
  * @param buffer 
  * @param bufferSize 
  */
-cmd_t commandHandler(char* buffer, size_t bufferSize, BytesBlock commnads[4])
+cmd_t commandHandler(Buffer* buffer, BytesBlock commands[4])
 {
-    // size_t index = findBlankCharInString(buffer, bufferSize);
-    BytesBlock cmd = {.start=buffer, .len=0};
+    size_t index = findBlankCharInString(buffer->data, buffer->used);
+    BytesBlock cmd = {.start=buffer->data, .len=index};
 
     BytesBlock first = {NULL, 0}, second = {NULL, 0}, third = {NULL, 0};
 
@@ -357,60 +112,144 @@ cmd_t commandHandler(char* buffer, size_t bufferSize, BytesBlock commnads[4])
 
     if(strncmp(cmd.start, "/auth", cmd.len) == 0)
     {
-        cmd.len = 5;
-        getWord(&first, &(cmd.start[cmd.len]), bufferSize - (cmd.len));
-        getWord(&second, &(first.start[cmd.len-1]), bufferSize - (cmd.len + first.len));
-        getWord(&third, &(second.start[cmd.len-1]), bufferSize - (cmd.len + first.len + second.len));
+        getWord(&first, &(cmd.start[cmd.len]), buffer->used - (cmd.len));
+        getWord(&second, &(first.start[first.len]), buffer->used - (cmd.len + first.len));
+        getWord(&third, &(second.start[second.len]), buffer->used - (cmd.len + first.len + second.len));
         type = AUTH;
     }
     else if(strncmp(cmd.start, "/join", cmd.len) == 0)
     {
-        cmd.len = 5;
-        getWord(&first, &(cmd.start[cmd.len]), bufferSize - (cmd.len));
+        getWord(&first, &(cmd.start[cmd.len]), buffer->used - (cmd.len));
         type = JOIN;
     }
     else if(strncmp(cmd.start, "/rename", cmd.len) == 0)
     {
-        cmd.len = 7;
-        getWord(&first, &(cmd.start[cmd.len]), bufferSize - (cmd.len));
+        getWord(&first, &(cmd.start[cmd.len]), buffer->used - (cmd.len));
         type = RENAME;
     }
     else if(strncmp(cmd.start, "/help", cmd.len) == 0)
     {
-        cmd.len = 5;
         type = HELP;
+    }
+    else if(strncmp(cmd.start, "/exit", cmd.len) == 0)
+    {
+        type = CMD_EXIT;
     }
     else
     {
         type = PLAIN_MSG;
     }
 
-    commnads[0] = cmd;
-    commnads[1] = first;
-    commnads[2] = second;
-    commnads[3] = third;
+    commands[0] = cmd;
+    commands[1] = first;
+    commands[2] = second;
+    commands[3] = third;
 
     return type;
+}
+
+void storeInformation(cmd_t cmdType, BytesBlock commands[4], CommunicationDetails* comDetails)
+{
+    switch (cmdType)
+    {
+    case AUTH:
+        // commands: CMD, USERNAME, SECRET, DISPLAYNAME
+        bufferResize(&(comDetails->displayName), commands[3].len + 1);
+        stringReplace(comDetails->displayName.data, commands[3].start, commands[3].len);
+        comDetails->displayName.data[commands[3].len] = '\0';
+        comDetails->displayName.used = commands[3].len;
+        break;
+    case JOIN:
+        // commands: CMD, CHANNELID
+        bufferResize(&(comDetails->channelID), commands[1].len + 1);
+        stringReplace(comDetails->channelID.data, commands[1].start, commands[1].len);
+        comDetails->channelID.used = commands[1].len;
+        break;
+    case RENAME:
+        // commands: CMD, DISPLAYNAME
+        bufferResize(&(comDetails->displayName), commands[1].len + 1);
+        stringReplace(comDetails->displayName.data, commands[1].start, commands[1].len);
+        comDetails->displayName.data[commands[1].len] = '\0';
+        comDetails->displayName.used = commands[1].len;
+        break;;
+    default: break;
+    }
 }
 
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
 
-void assembleProtocol(cmd_t type, BytesBlock commands[4])
+#define COPY_STR_TO_BUFFER(dst, src) stringReplace(&(dst), src.start, src.len)
+
+void assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, CommunicationDetails* comDetails)
 {
+    size_t expectedSize = commands[0].len + commands[1].len + commands[2].len + commands[3].len + 10;
+    bufferResize(buffer, expectedSize);
 
-    if(type){}
-    printByteBlock(&(commands[0]), 0);
-    printByteBlock(&(commands[1]), 0);
-    printByteBlock(&(commands[2]), 0);
-    printByteBlock(&(commands[3]), 0);
+    size_t ptrPos = 0;
 
-    printf("\n");
-    printByteBlock(&(commands[0]), 1);
-    printByteBlock(&(commands[1]), 1);
-    printByteBlock(&(commands[2]), 1);
-    printByteBlock(&(commands[3]), 1);
+    // MessageType
+    buffer->data[0] = MSG_TYPE_AUTH;
+    ptrPos += 1;
+
+    // MessageID
+    // Break msgCounter into two bites
+    unsigned char high = (unsigned char)((comDetails->msgCounter) >> 8);
+    unsigned char low = (unsigned char)((comDetails->msgCounter) & 0xff);
+
+    buffer->data[1] = high;  
+    ptrPos += 1;
+    buffer->data[2] = low;  
+    ptrPos += 1;
+
+    // ------------------------------------------------------------------------
+    if(type == AUTH || type == JOIN || type == PLAIN_MSG)
+    {
+        // Join/Msg: ChannelID / Auth: Username
+        COPY_STR_TO_BUFFER(buffer->data[ptrPos], commands[1]);
+        ptrPos += commands[1].len;
+        // 0 byte
+        buffer->data[ptrPos] = '\0';
+        ptrPos += 1;
+    }
+
+    // ------------------------------------------------------------------------
+    if(type == AUTH || type == PLAIN_MSG)
+    {
+        // Join: DisplayName / Msg: MessageContents / Auth: DisplayName
+        COPY_STR_TO_BUFFER(buffer->data[ptrPos], commands[2]);
+        ptrPos += commands[2].len;
+
+        // 0 byte
+        buffer->data[ptrPos] = '\0';
+        ptrPos += 1;
+    } 
+    else if (type == JOIN)
+    {
+        stringReplace(&( buffer->data[ptrPos] ), comDetails->displayName.data, comDetails->displayName.used);
+        ptrPos += comDetails->displayName.used;
+
+        // 0 byte
+        buffer->data[ptrPos] = '\0';
+        ptrPos += 1;
+    }
+    // ------------------------------------------------------------------------
+    if(type == AUTH)
+    {
+        // Auth: Secret
+        COPY_STR_TO_BUFFER(buffer->data[ptrPos], commands[3]);
+        ptrPos += commands[3].len;
+        // 0 byte
+        buffer->data[ptrPos] = '\0';
+        ptrPos += 1;
+    }
+    // ------------------------------------------------------------------------
+
+    buffer->used = ptrPos;
+
+    printBuffer(buffer, 1, 0);
+    printBuffer(buffer, 0, 1);
 }
 
 // ----------------------------------------------------------------------------
@@ -441,24 +280,41 @@ int main(int argc, char* argv[])
     int addressSize = sizeof(address);
 
     // ------------------------------------------------------------------------
-    // 
+    // Declaring and initializing variables need for communication
     // ------------------------------------------------------------------------
 
     int flags = 0; //TODO: check if some usefull flags could be done
-    char* buffer = NULL; // variable to store client input to be send to server
-    size_t bufferSize = 0; // size of buffer to correctly manage memory
-    unsigned numOfMsgs = 0; // counter of messages send
     cmd_t cmdType; // variable to store current command typed by user
+    Buffer clientCommands;
+    Buffer protocolMsg;
+
+    bufferReset(&clientCommands);
+    bufferReset(&protocolMsg);
+    
+    CommunicationDetails comDetails;
+    comDetails.msgCounter = 0;
+
+    bufferReset(&(comDetails.displayName));
+    bufferReset(&(comDetails.channelID));
+
+    // ------------------------------------------------------------------------
+    // 
+    // ------------------------------------------------------------------------
 
     BytesBlock commands[4];
     do 
     {
-        size_t bytesLoaded = loadBuffer(&buffer, &bufferSize);
-        cmdType = commandHandler(buffer, bytesLoaded, commands);
+        // size_t bytesLoaded = loadBuffer(&buffer, &bufferSize);
+        clientCommands.used = loadBufferFromStdin(&clientCommands);
 
-        assembleProtocol(cmdType, commands);
+        cmdType = commandHandler(&clientCommands, commands);
+
+        storeInformation(cmdType, commands, &comDetails);
+
+        assembleProtocol(cmdType, commands, &protocolMsg, &comDetails);
+
         // send buffer to the server 
-        int bytesTx = sendto(clientSocket, buffer, bytesLoaded, flags, serverAddress, addressSize);
+        int bytesTx = sendto(clientSocket, clientCommands.data, clientCommands.used, flags, serverAddress, addressSize);
 
         if(bytesTx < 0)
         {
@@ -466,11 +322,13 @@ int main(int argc, char* argv[])
             exit(1); // TODO: error code change
         }
 
-        // increase number of messages recevied
-        numOfMsgs++;
-    } while (strcmp(buffer, "/exit") != 0);
+        if(cmdType == CMD_EXIT) { break; }
 
-    printf("Communicaton ended with %u messages\n", numOfMsgs); //TODO: delete
+        // increase number of messages recevied
+        comDetails.msgCounter += 1;
+    } while (1);
+
+    printf("Communicaton ended with %u messages\n", comDetails.msgCounter); //TODO: delete
 
     // ------------------------------------------------------------------------
     // Closing up communication
@@ -478,7 +336,8 @@ int main(int argc, char* argv[])
 
     // close clientSocket
     shutdown(clientSocket, SHUT_RDWR);
-    free(buffer);
+    free(clientCommands.data);
+    free(protocolMsg.data);
 
     return 0;
 }

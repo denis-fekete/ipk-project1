@@ -2,7 +2,7 @@
 CXX      := gcc
 # CPPVERSION := -std=c++20
 CPPVERSION := -std=c17
-CXXFLAGS :=  $(CPPVERSION) -pedantic-errors -Wall -Wextra -Werror -g
+CXXFLAGS :=  $(CPPVERSION) -pedantic-errors -Wall -Wextra -Werror -g -DDEBUG
 LDFLAGS  := -lm -lpcap -lnet
 BUILD    := ./build
 OBJ_DIR  := $(BUILD)/objects
