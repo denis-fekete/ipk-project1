@@ -1,11 +1,19 @@
 #include "buffer.h"
 
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
 void bufferReset(Buffer* buffer)
 {
     buffer->data = NULL;
     buffer->allocated = 0;
     buffer->used = 0;
 }
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
 
 void bufferResize(Buffer* buffer, size_t newSize)
 {
@@ -29,17 +37,10 @@ void bufferResize(Buffer* buffer, size_t newSize)
     buffer->data = tmp;
 }
 
-/**
- * @brief Fills buffer with characters from stdin.
- * 
- * Fills buffer character by character until EOF is found.
- * If buffer is running out of space, it will be resized
- * 
- * @param buffer Pointer to the buffer. Can be inputed as NULL, however correct buffer size
- * is required
- * @param bufferSize Pointer size of provided buffer
- */
-// size_t loadBuffer(char** buffer, size_t* bufferSize)
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
 size_t loadBufferFromStdin(Buffer* buffer)
 {
     char c = getc(stdin);
@@ -67,6 +68,10 @@ size_t loadBufferFromStdin(Buffer* buffer)
 
     return i;
 }
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
 
 void printBuffer(Buffer* buffer, int hex, int smallfilter)
 {

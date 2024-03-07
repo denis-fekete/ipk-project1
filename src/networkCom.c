@@ -1,5 +1,9 @@
 #include "networkCom.h"
 
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
 int getSocket(enum Protocols protocol)
 {   
     int family;
@@ -16,6 +20,9 @@ int getSocket(enum Protocols protocol)
     return newSocket;
 }
 
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
 
 struct sockaddr_in findServer(const char* serverHostname, uint16_t serverPort)
 {
@@ -33,7 +40,7 @@ struct sockaddr_in findServer(const char* serverHostname, uint16_t serverPort)
     memcpy(&serverAddress.sin_addr.s_addr, server->h_addr_list[0], server->h_length);
     
     #ifdef DEBUG
-    printf("INFO: Server socket %s : %d \n", inet_ntoa(serverAddress.sin_addr), ntohs(serverAddress.sin_port));
+    printf("DEBUG: Server socket %s : %d \n", inet_ntoa(serverAddress.sin_addr), ntohs(serverAddress.sin_port));
     #endif
     
     return serverAddress;

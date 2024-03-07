@@ -7,6 +7,10 @@ int errHandling(const char* msg, int errorCode)
     return 0;
 }
 
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
 long findZeroInString(char* string, size_t len)
 {
     long index = 0;
@@ -27,6 +31,10 @@ long findZeroInString(char* string, size_t len)
 }
 
 
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
 void getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize)
 {
     if(block == NULL || startOfLastWord == NULL || bufferSize <= 0)
@@ -42,6 +50,9 @@ void getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize)
     block->len = index;
 }
 
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
 
 long findBlankCharInString(char* string, size_t len)
 {
@@ -57,6 +68,8 @@ long findBlankCharInString(char* string, size_t len)
     // Character was not found
     return -1;
 }
+
+
 
 long skipBlankCharsInString(char* string, size_t len)
 {
@@ -79,7 +92,6 @@ long skipBlankCharsInString(char* string, size_t len)
     return -1;
 }
 
-
 int isEndingCharacter(char input)
 {
     // 3 = Ctrl-D, 4 = Ctrl-C
@@ -90,6 +102,10 @@ int isEndingCharacter(char input)
 
     return 1;
 }
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
 
 void printByteBlock(BytesBlock* block, int hex)
 {
@@ -110,6 +126,10 @@ void printByteBlock(BytesBlock* block, int hex)
     printf("\n");
 }
 
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
 void stringReplace(char* dst, char* src, size_t len)
 {
     if(dst == NULL || src == NULL || len == 0)
@@ -123,5 +143,15 @@ void stringReplace(char* dst, char* src, size_t len)
     {
         dst[i] = src[i];
     }
+}
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
+
+void displayMsgToUser(const char* msg)
+{
+    printf("Application: %s\n", msg);
 }
 

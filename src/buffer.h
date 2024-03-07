@@ -10,8 +10,23 @@
 
 #define INITIAL_BUFFER_SIZE 256
 
+/**
+ * @brief Sets default values to the buffer
+ * 
+ * @warning Do not use on buffer that already has allocated memory
+ * 
+ * @param buffer Buffer to be reseted
+ */
 void bufferReset(Buffer* buffer);
 
+/**
+ * @brief Resizes buffer to new size, if buffer is not
+ * iniatilized (NULL) default value (INITIAL_BUFFER_SIZE) will
+ * be used instead to prevent allocation of small buffers
+ * 
+ * @param buffer Buffer to be resized
+ * @param newSize New size
+ */
 void bufferResize(Buffer* buffer, size_t newSize);
 
 /**
