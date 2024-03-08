@@ -15,16 +15,53 @@
 //
 // ----------------------------------------------------------------------------
 
+void printHelpMenu()
+{
+    printf("TODO: print menu\n");
+}
+
 /**
  * @brief Processes arguments provided by user
  * 
  * @param argc Number of arguments given
  * @param argv Array of arguments strings (char pointers)
  */
-void processArguments(int argc, char* argv[])
+void processArguments(int argc, char* argv[], enum Protocols* prot, Buffer* ipAddress, uint16_t* portNum, uint16_t* udpTimeout, uint8_t* udpRetrans)
 {
-    // TODO: delete 
-    if(argc || argv) {}
+    int opt;
+    while((opt = getopt(argc, argv, "ht:s:p:d:r:")) != -1)
+    {
+        switch (opt)
+        {
+        case 'h':
+            printHelpMenu();
+            exit(EXIT_SUCCESS);
+            break;
+        case 't':
+            if(strcmp(optarg, "udp") == 0) { *prot = UDP; }
+            else if(strcmp(optarg, "tcp") == 0) { *prot = TCP; }
+            else
+            {
+                // TODO: change err code
+                errHandling("Unknown protocol provided in -t option. Use -h for help", 1);
+            }
+            break;
+        case 's': ; // compiler doesn't like size_t being after : 
+            size_t optLen = strlen(optarg);
+            bufferResize(ipAddress, optLen);
+            stringReplace(ipAddress->data, optarg, optLen);
+            break;
+        case 'p': *portNum = (uint16_t)atoi(optarg);
+            break;
+        case 'd': *udpTimeout = (uint16_t)atoi(optarg);
+            break;
+        case 'r': *udpRetrans = (uint8_t)atoi(optarg);
+            break;
+        default:
+            errHandling("Unknown option. Use -h for help", 1); //TODO: change err code
+            break;
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -44,6 +81,9 @@ void processArguments(int argc, char* argv[])
  */
 cmd_t commandHandler(Buffer* buffer, BytesBlock commands[4])
 {
+    // If buffer is not filled skip
+    if(buffer->used <= 0) { return NONE; }
+
     size_t index = findBlankCharInString(buffer->data, buffer->used);
     BytesBlock cmd = {.start=buffer->data, .len=index};
 
@@ -78,6 +118,8 @@ cmd_t commandHandler(Buffer* buffer, BytesBlock commands[4])
     }
     else
     {
+        first.start = buffer->data;
+        first.len = buffer->used; 
         type = PLAIN_MSG;
     }
 
@@ -159,6 +201,13 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
     case AUTH: buffer->data[0] = MSG_TYPE_AUTH; break;
     case JOIN: buffer->data[0] = MSG_TYPE_JOIN; break;
     case RENAME: buffer->data[0] = MSG_TYPE_JOIN; break;
+    case PLAIN_MSG: buffer->data[0] = MSG_TYPE_MSG; break;
+    case CMD_EXIT: 
+        // buffer->data[0] = (signed char) MSG_TYPE_BYE;
+        buffer->data[0] = (char)0x0FF;
+        //DEBUG:
+        printBuffer(buffer, 1, 0); printBuffer(buffer, 0, 1);
+        return true; break;
     default: errHandling("Unknown command type in assembleProtocol() function", 1) /*TODO: change error code*/; break;
     }
     ptrPos += 1;
@@ -174,13 +223,13 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
     ptrPos += 1;
 
     // ------------------------------------------------------------------------
-    if(type == AUTH || type == JOIN || type == PLAIN_MSG)
+    if(type == AUTH || type == JOIN)
     {
-        // Join/Msg: ChannelID / Auth: Username
+        // Join: ChannelID  / Auth: Username
         BLOCK_TO_BUFF(buffer->data[ptrPos], commands[1]);
         ptrPos += commands[1].len;
         // 0 byte
-        buffer->data[ptrPos] = '\0';
+        buffer->data[ptrPos] = 0;
         ptrPos += 1;
     }
     else if(type == RENAME)
@@ -194,24 +243,39 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
         stringReplace(&( buffer->data[ptrPos] ), comDetails->channelID.data, comDetails->channelID.used);
         ptrPos += comDetails->channelID.used;
         // 0 byte
-        buffer->data[ptrPos] = '\0';
+        buffer->data[ptrPos] = 0;
+        ptrPos += 1;
+    }
+    else if(type == PLAIN_MSG)
+    {
+        if(comDetails->displayName.data == NULL)
+        { 
+            displayMsgToUser("ChannelID not provided, cannot rename! (Did you use /auth before this commands?). Use /help for help.");
+            return false;
+        }
+        // Rename: ChannelID
+        stringReplace(&( buffer->data[ptrPos] ), comDetails->displayName.data, comDetails->displayName.used);
+        ptrPos += comDetails->displayName.used;
+        // 0 byte
+        buffer->data[ptrPos] = 0;
         ptrPos += 1;
     }
 
     // ------------------------------------------------------------------------
     if(type == AUTH || type == PLAIN_MSG || type == RENAME) // Msg: MessageContents / Auth: DisplayName
     {
-        if(type == RENAME)
+        if(type == AUTH)
         {
-            BLOCK_TO_BUFF(buffer->data[ptrPos], commands[1]);
+            BLOCK_TO_BUFF(buffer->data[ptrPos], commands[2]);
+            ptrPos += commands[2].len;
         }
         else
         {
-            BLOCK_TO_BUFF(buffer->data[ptrPos], commands[2]);
+            BLOCK_TO_BUFF(buffer->data[ptrPos], commands[1]);
+            ptrPos += commands[1].len;
         }
-        ptrPos += commands[2].len;
         // 0 byte
-        buffer->data[ptrPos] = '\0';
+        buffer->data[ptrPos] = 0;
         ptrPos += 1;
     } 
     else if (type == JOIN) // Join: DisplayName
@@ -225,7 +289,7 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
         stringReplace(&( buffer->data[ptrPos] ), comDetails->displayName.data, comDetails->displayName.used);
         ptrPos += comDetails->displayName.used;
         // 0 byte
-        buffer->data[ptrPos] = '\0';
+        buffer->data[ptrPos] = 0;
         ptrPos += 1;
     }
     // ------------------------------------------------------------------------
@@ -235,7 +299,7 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
         BLOCK_TO_BUFF(buffer->data[ptrPos], commands[3]);
         ptrPos += commands[3].len;
         // 0 byte
-        buffer->data[ptrPos] = '\0';
+        buffer->data[ptrPos] = 0;
         ptrPos += 1;
     }
     // ------------------------------------------------------------------------
@@ -259,18 +323,27 @@ int main(int argc, char* argv[])
     // Process arguments from user
     // ------------------------------------------------------------------------
 
-    char serverHostname[] = "127.0.0.1"; /*"anton5.fit.vutbr.cz"*/
-    uint16_t serverPort = PORT_NUMBER; /*4567*/ 
+    char defaultHostname[] = "127.0.0.1"; /*"anton5.fit.vutbr.cz"*/
+    uint16_t defaultPort = PORT_NUMBER; /*4567*/ 
 
-    processArguments(argc, argv);
+    // Use buffer for storing ip address
+    Buffer clientCommands; bufferReset(&clientCommands);
+
+    enum Protocols protocol;
+    uint16_t portNum = 0;
+    uint16_t udpTimeout = 0;
+    uint8_t udpRetransmissions = 0;
+    processArguments(argc, argv, &protocol, &clientCommands, &portNum, &udpTimeout, &udpRetransmissions);
 
     // ------------------------------------------------------------------------
     // Get server information and create socket
     // ------------------------------------------------------------------------
 
     // open socket for comunication on client side (this)
-    int clientSocket = getSocket(UDP);
+    int clientSocket = getSocket(protocol);
 
+    char* serverHostname = (clientCommands.data != NULL)? clientCommands.data : defaultHostname;
+    uint16_t serverPort = (portNum != 0)? portNum : defaultPort;
     // get server address
     struct sockaddr_in address = findServer(serverHostname, serverPort);
     struct sockaddr* serverAddress = (struct sockaddr*) &address;
@@ -282,8 +355,8 @@ int main(int argc, char* argv[])
 
     int flags = 0; //TODO: check if some usefull flags could be done
     cmd_t cmdType; // variable to store current command typed by user
-    Buffer clientCommands; bufferReset(&clientCommands);
     Buffer protocolMsg; bufferReset(&protocolMsg);
+    // Buffer clientCommands; bufferReset(&clientCommands); // Moved up for reusability
     
     CommunicationDetails comDetails;
     comDetails.msgCounter = 0;
@@ -303,6 +376,7 @@ int main(int argc, char* argv[])
         // Separate clientCommands buffer into commands (ByteBlocks),
         // store recognized command
         cmdType = commandHandler(&clientCommands, commands);
+        if(cmdType == NONE) { continue; }
         // Based on command type store commands into comDetails for future use
         // in other commands
         storeInformation(cmdType, commands, &comDetails);
@@ -320,9 +394,9 @@ int main(int argc, char* argv[])
             {
                 errHandling("Sending bytes was not successful", 1); // TODO: change error code
             }
+            // increase number of messages recevied, only if message was sent
+            comDetails.msgCounter += 1;
         }
-        // increase number of messages recevied
-        comDetails.msgCounter += 1;
 
         // Exits loop if /exit detected 
         if(cmdType == CMD_EXIT) { break; }

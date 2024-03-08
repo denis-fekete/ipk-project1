@@ -9,7 +9,7 @@
 #include "buffer.h" 
 #include "customtypes.h"
 
-typedef enum CommandType {AUTH, JOIN, RENAME, HELP, PLAIN_MSG, CMD_EXIT} cmd_t;
+typedef enum CommandType {AUTH, JOIN, RENAME, HELP, PLAIN_MSG, CMD_EXIT, NONE} cmd_t;
 enum Protocols {UDP, TCP};
 
 #define MSG_TYPE_CONFIRM 0x00
@@ -26,7 +26,7 @@ enum Protocols {UDP, TCP};
  * @param msg Message to be printed
  * @param errorCode Error code to be exited with
  */
-void errHandling(const char* msg, int errorCode);
+int errHandling(const char* msg, int errorCode);
 
 /**
  * @brief Prints message to the user, used for feedback no error messages

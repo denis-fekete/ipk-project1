@@ -79,7 +79,7 @@ void printBuffer(Buffer* buffer, int hex, int smallfilter)
 
     for(size_t i = 0; i < buffer->used; i++)
     {
-        if(hex) { printf("%x ", buffer->data[i]); }
+        if(hex) { printf("%hhx ", (unsigned char)buffer->data[i]); }
         else
         {
             if(smallfilter)
@@ -91,7 +91,7 @@ void printBuffer(Buffer* buffer, int hex, int smallfilter)
                 }
                 else 
                 {
-                    printf("(%x)", c);
+                    printf("(%hhx)", (unsigned char)c);
                 }
             }
             else { printf("%c", buffer->data[i]); }
