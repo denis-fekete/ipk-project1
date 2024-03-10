@@ -11,7 +11,7 @@ int getSocket(enum Protocols protocol)
     {
         case UDP: family = SOCK_DGRAM; break; 
         case TCP: family = SOCK_STREAM; break;
-        default: errHandling("Unknown protocol passed to function get socket)", -1); 
+        default: errHandling("Unknown protocol passed to function get socket", -1); 
     }
 
     int newSocket = socket(family, AF_INET, 0);
@@ -26,6 +26,7 @@ int getSocket(enum Protocols protocol)
 
 struct sockaddr_in findServer(const char* serverHostname, uint16_t serverPort)
 {
+    //TODO: getaddrinfo(), this is depricated, with freeaddrinfo
     struct hostent* server = gethostbyname(serverHostname);
     if(server == NULL)
     {
