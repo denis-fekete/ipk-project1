@@ -1,3 +1,12 @@
+/**
+ * @file customtypes.h
+ * @author Denis Fekete (xfeket01@vutbr.cz)
+ * @brief 
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 #ifndef CUSTOM_TYPES_H
 #define CUSTOM_TYPES_H 1
 

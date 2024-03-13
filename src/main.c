@@ -1,9 +1,20 @@
+/**
+ * @file main.c
+ * @author Denis Fekete (xfeket01@vutbr.cz)
+ * @brief 
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 // #include "netinet/ether.h"
 // #include "netinet/tcp.h"
 // #include "netinet/udp.h"
 // #include "netinet/ip_icmp.h"
 
-#include "getopt.h"
+#include "getopt.h" // argument processing
+#include "pthread.h"
+
 #include "../tests/clientXserver.h"
 
 #include "customtypes.h"
@@ -11,6 +22,9 @@
 #include "utils.h"
 #include "networkCom.h"
 #include "ipk24protocol.h"
+#include "protocolReceiver.h"
+
+extern bool continueProgram;
 
 // ----------------------------------------------------------------------------
 //
@@ -121,31 +135,45 @@ int main(int argc, char* argv[])
     // Process arguments from user
     // ------------------------------------------------------------------------
 
+    #ifdef DEBUG
     char defaultHostname[] = "127.0.0.1"; /*"anton5.fit.vutbr.cz"*/
-    uint16_t defaultPort = PORT_NUMBER; /*4567*/ 
+    #endif
+    // Use buffer for storing ip address, 
+    // then used for storing client input / commanads
+    Buffer clientCommands; // 
+    bufferReset(&clientCommands);
 
-    // Use buffer for storing ip address
-    Buffer clientCommands; bufferReset(&clientCommands);
+    NetworkConfig config; // store network configuration / settings 
+    DEFAULT_NETWORK_CONFIG(config);
 
-    enum Protocols protocol;
-    uint16_t portNum = 0;
-    uint16_t udpTimeout = 0;
-    uint8_t udpRetransmissions = 0;
-    processArguments(argc, argv, &protocol, &clientCommands, &portNum, &udpTimeout, &udpRetransmissions);
-
+    processArguments(argc, argv, &(config.protocol), &clientCommands, 
+                    &(config.portNumber), &(config.udpTimeout), 
+                    &(config.udpMaxRetries));
+    
+    if(config.protocol == ERR)
+    { 
+        errHandling("Argument protocol (-t udp / tcp) is mandatory!", 1); /*TODO:*/
+    }
+    #ifndef DEBUG
+        if(clientCommands.data == NULL) { errHandling("Server address is (-s address) is mandatory", 1); /*TODO:*/ }
+    #endif
     // ------------------------------------------------------------------------
     // Get server information and create socket
     // ------------------------------------------------------------------------
 
     // open socket for comunication on client side (this)
-    int clientSocket = getSocket(protocol);
+    config.openedSocket = getSocket(config.protocol);
 
-    char* serverHostname = (clientCommands.data != NULL)? clientCommands.data : defaultHostname;
-    uint16_t serverPort = (portNum != 0)? portNum : defaultPort;
+    #ifdef DEBUG
+        char* serverHostname = (clientCommands.data != NULL)? clientCommands.data : defaultHostname;
+        struct sockaddr_in address = findServer(serverHostname, config.portNumber);
+    #else
+        struct sockaddr_in address = findServer(clientCommands.data, config.portNumber);
+    #endif
+
     // get server address
-    struct sockaddr_in address = findServer(serverHostname, serverPort);
-    struct sockaddr* serverAddress = (struct sockaddr*) &address;
-    int addressSize = sizeof(address);
+    config.serverAddress = (struct sockaddr*) &address;
+    config.serverAddressSize = sizeof(address);
 
     // ------------------------------------------------------------------------
     // Declaring and initializing variables need for communication
@@ -153,22 +181,39 @@ int main(int argc, char* argv[])
 
     int flags = 0; //TODO: check if some usefull flags could be done
     cmd_t cmdType; // variable to store current command typed by user
-    Buffer protocolMsg; bufferReset(&protocolMsg);
+
+    Buffer protocolMsg;
+    bufferReset(&protocolMsg);
+
     // Buffer clientCommands; bufferReset(&clientCommands); // Moved up for reusability
     
     CommunicationDetails comDetails;
     comDetails.msgCounter = 0;
+
     bufferReset(&(comDetails.displayName));
     bufferReset(&(comDetails.channelID));
 
     BytesBlock commands[4];
 
     // ------------------------------------------------------------------------
-    // Loop of communication
+    // Setup second thread that will handle data receiving
     // ------------------------------------------------------------------------
 
+    config.comDetails = &comDetails;
+
+    pthread_t protReceiver;
+    pthread_create(&protReceiver, NULL, protocolReceiver, &config);
+
+    // ------------------------------------------------------------------------
+    // Loop of communication
+    // ------------------------------------------------------------------------
+    
     do 
     {
+        // --------------------------------------------------------------------
+        // Convert user input into an protocol
+        // --------------------------------------------------------------------
+        bool canBeSended;
         // Load buffer from stdin, store length of buffer
         clientCommands.used = loadBufferFromStdin(&clientCommands);
         // Separate clientCommands buffer into commands (ByteBlocks),
@@ -179,33 +224,43 @@ int main(int argc, char* argv[])
         storeInformation(cmdType, commands, &comDetails);
         // Assembles array of bytes into Buffer protocolMsg, returns if 
         // message can be trasmitted   
-        bool canBeSended = assembleProtocol(cmdType, commands, &protocolMsg, &comDetails);
+        canBeSended = assembleProtocol(cmdType, commands, &protocolMsg, &comDetails);
+        printf("Assembling protocol:\n"); //DEBUG:
+        printBuffer(&protocolMsg, 0, 1); //DEBUG:
 
         int bytesTx; // number of sended bytes
         if(canBeSended)
         {
             // send buffer to the server 
-            bytesTx = sendto(clientSocket, clientCommands.data, clientCommands.used, flags, serverAddress, addressSize);
+            bytesTx = sendto(config.openedSocket, protocolMsg.data, 
+                            protocolMsg.used, flags, config.serverAddress, 
+                            config.serverAddressSize);
 
             if(bytesTx < 0)
             {
                 errHandling("Sending bytes was not successful", 1); // TODO: change error code
             }
-            // increase number of messages recevied, only if message was sent
-            comDetails.msgCounter += 1;
+        } 
+        else
+        {
+            //DEBUG:
+            errHandling("Wrong message contents, assembleProtocol() didn't allow message to be sent", 1);
         }
-
+        
         // Exit loop if /exit detected 
-        if(cmdType == CMD_EXIT) { break; }
-    } while (1);
+        if(cmdType == CMD_EXIT) { continueProgram = false; }
+    } while (continueProgram);
 
-    printf("DEBUG: Communicaton ended with %u messages\n", comDetails.msgCounter); //DEBUG: delete
-
+    #ifdef DEBUG
+        printf("DEBUG: Communicaton ended with %u messages\n", comDetails.msgCounter); //DEBUG: delete
+    #endif
     // ------------------------------------------------------------------------
     // Closing up communication
     // ------------------------------------------------------------------------
 
-    shutdown(clientSocket, SHUT_RDWR);
+    pthread_join(protReceiver, NULL);
+
+    shutdown(config.openedSocket, SHUT_RDWR);
     free(comDetails.displayName.data);
     free(comDetails.channelID.data);
     free(clientCommands.data);

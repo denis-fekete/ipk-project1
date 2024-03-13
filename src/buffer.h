@@ -1,3 +1,12 @@
+/**
+ * @file buffer.h
+ * @author Denis Fekete (xfeket01@vutbr.cz)
+ * @brief 
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 #ifndef BUFFER_H
 #define BUFFER_H 1
 

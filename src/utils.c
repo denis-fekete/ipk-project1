@@ -1,4 +1,16 @@
+/**
+ * @file utils.c
+ * @author Denis Fekete (xfeket01@vutbr.cz)
+ * @brief 
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 #include "utils.h"
+
+// Global variable shared between files to signalize whenever loops should continue
+bool continueProgram = true;
 
 int errHandling(const char* msg, int errorCode)
 {

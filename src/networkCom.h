@@ -1,3 +1,12 @@
+/**
+ * @file networkCom.h
+ * @author Denis Fekete (xfeket01@vutbr.cz)
+ * @brief 
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 #ifndef NETWORK_COM_H
 #define NETWORK_COM_H
 
@@ -5,8 +14,32 @@
 #include "sys/socket.h"
 #include "netdb.h"
 
+
 #include "utils.h"
 
+
+typedef struct NetworkConfig {
+    enum Protocols protocol;
+    uint16_t portNumber;
+    uint16_t udpTimeout;
+    uint8_t udpMaxRetries;
+    int openedSocket;
+    CommunicationDetails* comDetails;
+    struct sockaddr* serverAddress;
+    unsigned serverAddressSize;
+} NetworkConfig;
+
+#define PORT_NUMBER 4567
+
+#define DEFAULT_NETWORK_CONFIG(config)  \
+    config.protocol = ERR;              \
+    config.portNumber = PORT_NUMBER;    \
+    config.udpTimeout = 250;            \
+    config.udpMaxRetries = 3;           \
+    config.openedSocket = -1;           \
+    config.comDetails = NULL;           \
+    config.serverAddress = NULL;         \
+    config.serverAddressSize = 0;
 /**
  * @brief Get the Socket id
  * 

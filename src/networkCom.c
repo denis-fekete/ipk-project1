@@ -1,3 +1,12 @@
+/**
+ * @file networkCom.c
+ * @author Denis Fekete (xfeket01@vutbr.cz)
+ * @brief 
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 #include "networkCom.h"
 
 // ----------------------------------------------------------------------------
@@ -35,7 +44,7 @@ struct sockaddr_in findServer(const char* serverHostname, uint16_t serverPort)
     }
 
     struct sockaddr_in serverAddress;
-    memset(&serverAddress, 0, sizeof(serverAddress));
+    memset(&serverAddress, 0, sizeof(serverAddress)); // clear memory
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_port = htons(serverPort);
     memcpy(&serverAddress.sin_addr.s_addr, server->h_addr_list[0], server->h_length);

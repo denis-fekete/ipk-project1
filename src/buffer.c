@@ -1,3 +1,12 @@
+/**
+ * @file buffer.c
+ * @author Denis Fekete (xfeket01@vutbr.cz)
+ * @brief 
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 #include "buffer.h"
 
 // ----------------------------------------------------------------------------
@@ -22,10 +31,8 @@ void bufferResize(Buffer* buffer, size_t newSize)
         return;
     }
 
-    // Get size of new buffer
-    const size_t sizeToAllocate = (buffer->allocated <= 0)? INITIAL_BUFFER_SIZE : buffer->allocated * 2;
     // Realloc buffer
-    char* tmp = realloc(buffer->data, sizeToAllocate);
+    char* tmp = realloc(buffer->data, newSize);
     // Check for failed memory reallocation
     if(tmp == NULL)
     {
@@ -33,7 +40,7 @@ void bufferResize(Buffer* buffer, size_t newSize)
         exit(1); // TODO: error code change
     }
     // Save new value to buffer and bufferSize
-    buffer->allocated = sizeToAllocate;
+    buffer->allocated = newSize;
     buffer->data = tmp;
 }
 
@@ -52,7 +59,7 @@ size_t loadBufferFromStdin(Buffer* buffer)
         // resize buffer if smaller than num. of loaded characters or zero
         if(buffer->data == NULL || buffer->allocated <= 0) 
         {
-            bufferResize(buffer, 256);
+            bufferResize(buffer, INITIAL_BUFFER_SIZE);
         }
         else if((buffer->allocated - 1) < i)
         {

@@ -1,3 +1,12 @@
+/**
+ * @file utils.h
+ * @author Denis Fekete (xfeket01@vutbr.cz)
+ * @brief 
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 #ifndef UTILS_H
 #define UTILS_H 1
 
@@ -10,15 +19,16 @@
 #include "customtypes.h"
 
 typedef enum CommandType {AUTH, JOIN, RENAME, HELP, PLAIN_MSG, CMD_EXIT, NONE} cmd_t;
-enum Protocols {UDP, TCP};
-
-#define MSG_TYPE_CONFIRM 0x00
-#define MSG_TYPE_REPLY 0x01
-#define MSG_TYPE_AUTH 0x02
-#define MSG_TYPE_JOIN 0x03
-#define MSG_TYPE_MSG 0x04
-#define MSG_TYPE_ERR 0xFE
-#define MSG_TYPE_BYE 0xFF
+enum Protocols {ERR, UDP, TCP};
+typedef enum MessageType {
+    MSG_CONF = 0x00,
+    MSG_REPLY = 0x01,
+    MSG_AUTH = 0x02,
+    MSG_JOIN = 0x03,
+    MSG_MSG = 0x04,
+    MSG_ERR = 0xFE,
+    MSG_BYE = 0xFF
+  } msg_t;
 
 /**
  * @brief Print error message to stderr and exit program with errorCode
