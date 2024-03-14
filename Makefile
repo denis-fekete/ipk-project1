@@ -1,39 +1,34 @@
-# CXX      := -c++
-CXX      := gcc
-# CPPVERSION := -std=c++20
-CPPVERSION := -std=c17
-CXXFLAGS :=  $(CPPVERSION) -pedantic-errors -Wall -Wextra -Werror -g -DDEBUG
-LDFLAGS  := -lm -lpcap -lnet
-BUILD    := ./build
-OBJ_DIR  := $(BUILD)/objects
-TARGET   := program
-SRC      :=\
-   $(wildcard src/*.c) \
-#    $(wildcard src/*.cpp) \
+SRC_DIR = src
+BUILD_DIR = build
+OBJ_DIR = $(BUILD_DIR)/objects
+TARGET = program
+LIB_DIR = $(SRC_DIR)/libs
 
-OBJECTS  := $(SRC:%.cpp=$(OBJ_DIR)/%.o)
+CC = gcc
+CVERSTION = -std=c17
+LDFLAGS := -lm -lpcap -lnet
 
+CFLAGS = $(CVERSTION) -pedantic-errors -Wall -Wextra -Werror -g -DDEBUG -I$(LIB_DIR)
 
-all: build $(BUILD)/$(TARGET)
+SRCS := $(wildcard $(SRC_DIR)/*.c)
+LIB_SRCS := $(wildcard $(LIB_DIR)/*.c)
+OBJS := $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRCS))
+LIB_OBJS := $(patsubst $(LIB_DIR)/%.c, $(OBJ_DIR)/libs/%.o, $(LIB_SRCS))
 
-$(OBJ_DIR)/%.o: %.cpp
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -c $< -MMD -o $@
+all: $(BUILD_DIR)/$(TARGET)
 
-$(BUILD)/$(TARGET): $(OBJECTS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -o $(BUILD)/$(TARGET) $^ $(LDFLAGS)
+$(BUILD_DIR)/$(TARGET): $(OBJS) $(LIB_OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c -o $@ $<
 
-.PHONY: all build clean debug release info
+$(OBJ_DIR)/libs/%.o: $(LIB_DIR)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c -o $@ $<
 
-build:
-	@mkdir -p $(BUILD)
-	@mkdir -p $(OBJ_DIR)
-
-run:
-	@./$(BUILD)/$(TARGET)
+.PHONY: clean
 
 clean:
-	-@rm -rvf $(OBJ_DIR)/*
-	-@rm -rvf $(BUILD)/*
+	rm -rf $(OBJ_DIR)/*.o $(OBJ_DIR)/libs/*.o $(BUILD_DIR)/$(TARGET)

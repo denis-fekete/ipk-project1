@@ -1,3 +1,12 @@
+/**
+ * @file protocolReceiver.c
+ * @author Denis Fekete (xfeket01@vutbr.cz)
+ * @brief 
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 #include "protocolReceiver.h"
 
 extern bool continueProgram;
@@ -16,12 +25,19 @@ extern bool continueProgram;
         } \
     } while (continueProgram);
 
+
+void* protocolReceiver(void *vargp)
+{
+    if(vargp){}
+    return NULL;
+}
 /**
  * @brief 
  * 
  * @param vargp 
  * @return void* 
  */
+/*
 void* protocolReceiver(void *vargp)
 {
     // ------------------------------------------------------------------------
@@ -33,7 +49,7 @@ void* protocolReceiver(void *vargp)
     BytesBlock commands[4]; // array of commands 
 
     Buffer serverResponse;
-    bufferReset(&serverResponse);
+    bufferClear(&serverResponse);
     bufferResize(&serverResponse, 1500); // set max size messages from server
 
     // Await response
@@ -102,4 +118,4 @@ void* protocolReceiver(void *vargp)
     free(serverResponse.data);
 
     return NULL;
-}
+}*/

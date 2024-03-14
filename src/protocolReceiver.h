@@ -1,14 +1,23 @@
+/**
+ * @file protocolReceiver.h
+ * @author Denis Fekete (xfeket01@vutbr.cz)
+ * @brief 
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 #ifndef PROTOCOL_RECEIVER_H
 #define PROTOCOL_RECEIVER_H 1
 
-#include "customtypes.h"
-#include "customtypes.h"
-#include "buffer.h"
-#include "utils.h"
-#include "networkCom.h"
-#include "ipk24protocol.h"
-#include "protocolReceiver.h"
 #include "sys/epoll.h"
+
+#include "libs/customtypes.h"
+#include "libs/buffer.h"
+#include "libs/utils.h"
+#include "libs/networkCom.h"
+#include "libs/ipk24protocol.h"
+#include "protocolReceiver.h"
 
 void* protocolReceiver(void *vargp);
 

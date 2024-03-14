@@ -26,7 +26,7 @@
  * 
  * @param buffer Buffer to be reseted
  */
-void bufferReset(Buffer* buffer);
+void bufferClear(Buffer* buffer);
 
 /**
  * @brief Resizes buffer to new size, if buffer is not

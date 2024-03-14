@@ -141,6 +141,7 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
 #define BBLOCK_END(block) &(block.start[block.len]);
 #define BBLOCK_END_W_ZERO_BYTE(block) &(block.start[block.len + 1]);
 #define TYPE_ID_LEN 3
+
 /**
  * @brief 
  * 
@@ -156,7 +157,7 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
 
     // Get msg type
     u_int8_t msgTypeInt = (u_int8_t) (buffer->data[0]);
-\
+    
     // Get msgId
     unsigned char high = buffer->data[1];
     unsigned char low = buffer->data[2];

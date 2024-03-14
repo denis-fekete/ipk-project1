@@ -13,7 +13,7 @@
 //
 // ----------------------------------------------------------------------------
 
-void bufferReset(Buffer* buffer)
+void bufferClear(Buffer* buffer)
 {
     buffer->data = NULL;
     buffer->allocated = 0;

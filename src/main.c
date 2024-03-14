@@ -17,14 +17,15 @@
 
 #include "../tests/clientXserver.h"
 
-#include "customtypes.h"
-#include "buffer.h"
-#include "utils.h"
-#include "networkCom.h"
-#include "ipk24protocol.h"
+#include "libs/customtypes.h"
+#include "libs/buffer.h"
+#include "libs/utils.h"
+#include "libs/networkCom.h"
+#include "libs/ipk24protocol.h"
 #include "protocolReceiver.h"
 
-extern bool continueProgram;
+// Global variable shared between files to signalize whenever loops should continue
+bool continueProgram = true;
 
 // ----------------------------------------------------------------------------
 //
@@ -141,7 +142,7 @@ int main(int argc, char* argv[])
     // Use buffer for storing ip address, 
     // then used for storing client input / commanads
     Buffer clientCommands; // 
-    bufferReset(&clientCommands);
+    bufferClear(&clientCommands);
 
     NetworkConfig config; // store network configuration / settings 
     DEFAULT_NETWORK_CONFIG(config);
@@ -183,15 +184,15 @@ int main(int argc, char* argv[])
     cmd_t cmdType; // variable to store current command typed by user
 
     Buffer protocolMsg;
-    bufferReset(&protocolMsg);
+    bufferClear(&protocolMsg);
 
-    // Buffer clientCommands; bufferReset(&clientCommands); // Moved up for reusability
+    // Buffer clientCommands; bufferClear(&clientCommands); // Moved up for reusability
     
     CommunicationDetails comDetails;
     comDetails.msgCounter = 0;
 
-    bufferReset(&(comDetails.displayName));
-    bufferReset(&(comDetails.channelID));
+    bufferClear(&(comDetails.displayName));
+    bufferClear(&(comDetails.channelID));
 
     BytesBlock commands[4];
 
@@ -203,6 +204,10 @@ int main(int argc, char* argv[])
 
     pthread_t protReceiver;
     pthread_create(&protReceiver, NULL, protocolReceiver, &config);
+
+    // pthread_t protSender;
+    // pthread_create(&protReceiver, NULL, protocolReceiver, &config);
+
 
     // ------------------------------------------------------------------------
     // Loop of communication
@@ -259,6 +264,7 @@ int main(int argc, char* argv[])
     // ------------------------------------------------------------------------
 
     pthread_join(protReceiver, NULL);
+    // pthread_join(protSender, NULL);
 
     shutdown(config.openedSocket, SHUT_RDWR);
     free(comDetails.displayName.data);

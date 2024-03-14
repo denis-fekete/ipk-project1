@@ -9,9 +9,6 @@
 
 #include "utils.h"
 
-// Global variable shared between files to signalize whenever loops should continue
-bool continueProgram = true;
-
 int errHandling(const char* msg, int errorCode)
 {
     fprintf(stderr, "ERROR: %s\n", msg);
