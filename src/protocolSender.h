@@ -1,5 +1,5 @@
 /**
- * @file protocolReceiver.h
+ * @file protocolSender.h
  * @author Denis Fekete (xfeket01@vutbr.cz)
  * @brief 
  * 
@@ -7,10 +7,10 @@
  * 
  */
 
-#ifndef PROTOCOL_RECEIVER_H
-#define PROTOCOL_RECEIVER_H 1
+#ifndef PROTOCOL_SENDER_H
+#define PROTOCOL_SENDER_H 1
 
-#include "sys/epoll.h"
+#include "pthread.h"
 
 #include "libs/customtypes.h"
 #include "libs/buffer.h"
@@ -18,6 +18,6 @@
 #include "libs/networkCom.h"
 #include "libs/ipk24protocol.h"
 
-void* protocolReceiver(void *vargp);
+void* protocolSender(void* vargp);
 
 #endif

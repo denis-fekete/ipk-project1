@@ -26,18 +26,13 @@ extern bool continueProgram;
     } while (continueProgram);
 
 
-void* protocolReceiver(void *vargp)
-{
-    if(vargp){}
-    return NULL;
-}
 /**
  * @brief 
  * 
  * @param vargp 
  * @return void* 
  */
-/*
+
 void* protocolReceiver(void *vargp)
 {
     // ------------------------------------------------------------------------
@@ -118,4 +113,4 @@ void* protocolReceiver(void *vargp)
     free(serverResponse.data);
 
     return NULL;
-}*/
+}

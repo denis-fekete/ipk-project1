@@ -22,7 +22,9 @@
 #include "libs/utils.h"
 #include "libs/networkCom.h"
 #include "libs/ipk24protocol.h"
+
 #include "protocolReceiver.h"
+#include "protocolSender.h"
 
 // Global variable shared between files to signalize whenever loops should continue
 bool continueProgram = true;
@@ -205,9 +207,8 @@ int main(int argc, char* argv[])
     pthread_t protReceiver;
     pthread_create(&protReceiver, NULL, protocolReceiver, &config);
 
-    // pthread_t protSender;
-    // pthread_create(&protReceiver, NULL, protocolReceiver, &config);
-
+    pthread_t protSender;
+    pthread_create(&protSender, NULL, protocolSender, &config);
 
     // ------------------------------------------------------------------------
     // Loop of communication
@@ -264,7 +265,7 @@ int main(int argc, char* argv[])
     // ------------------------------------------------------------------------
 
     pthread_join(protReceiver, NULL);
-    // pthread_join(protSender, NULL);
+    pthread_join(protSender, NULL);
 
     shutdown(config.openedSocket, SHUT_RDWR);
     free(comDetails.displayName.data);
