@@ -12,26 +12,23 @@
 #define MSG_LISH_H
 
 #include "customtypes.h"
+#include "pthread.h"
 #include "buffer.h"
 
 // ----------------------------------------------------------------------------
 // Defines, typedefs and structures
 // ----------------------------------------------------------------------------
 
-#define DEFAULT_MESSAGE_QUEUE_SIZE 4
-
-typedef struct {
-    Buffer msg;
-    Buffer* next;
-    bool isValid;
+typedef struct Message {
+    Buffer* buffer;
+    struct Message* behindMe;
 } Message;
 
-typedef struct {
+typedef struct MessageQueue {
     Message* first; // Pointer to the first message
     Message* last; // Pointer to the last message
-    Message** queue; // Data array holding messages
     size_t len; // length of queue
-    size_t allocated; // allocated space
+    pthread_mutex_t lock;
 } MessageQueue;
 
 // ----------------------------------------------------------------------------
@@ -39,19 +36,26 @@ typedef struct {
 // ----------------------------------------------------------------------------
 
 /**
- * @brief Initializes MessageQueue with default size (DEFAULT_MESSAGE_QUEUE_SIZE)
+ * @brief Initializes MessageQueue
  * 
  * @param queue MessageQueue to be initalized
  */
-void Queue_Init(MessageQueue* queue);
+void queueInit(MessageQueue* queue);
+
+/**
+ * @brief Destroys MessageQueue
+ * 
+ * @param queue queue to be destroyed
+ */
+void queueDestroy(MessageQueue* queue);
 
 /**
  * @brief Return pointer to the first message 
  * 
  * @param queue Queue from which the message will be returned 
- * @return Message* 
+ * @return Buffer* First message
  */
-Message* Queue_GetMessage(MessageQueue* queue);
+Buffer* queueGetMessage(MessageQueue* queue);
 
 /**
  * @brief Adds new message to the queue at the end
@@ -59,13 +63,31 @@ Message* Queue_GetMessage(MessageQueue* queue);
  * @param queue 
  * @param buffer is and input buffer from which the new message will be created
  */
-void Queue_AddMessage(MessageQueue* queue, Buffer* buffer);
+void queueAddMessage(MessageQueue* queue, Buffer* buffer);
 
 /**
  * @brief Deletes first message and moves queue forward
  * 
  * @param queue Queue from which will be the message deleted
  */
-void Queue_PopMessage(MessageQueue* queue);
+void queuePopMessage(MessageQueue* queue);
+
+/**
+ * @brief Check if MessageQueue is empty
+ * 
+ * @param queue Queue to be checked
+ * @return true if queue is empty
+ * @return false if queue is not empty
+ */
+bool queueIsEmpty(MessageQueue* queue);
+
+/**
+ * @brief Returns length of MesssageQueue
+ * 
+ * @param queue queue to be checked
+ * @return size_t Number of Messages in queue
+ */
+size_t queueLength(MessageQueue* queue);
+
 
 #endif

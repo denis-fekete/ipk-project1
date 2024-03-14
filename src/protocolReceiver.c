@@ -8,16 +8,19 @@
  */
 
 #include "protocolReceiver.h"
+#include "time.h"
 
 extern bool continueProgram;
+extern NetworkConfig config;
+extern MessageQueue receivedQueue;
 
 // use macro for loop overhead because it would be too much tabulators
 #define LOOP_WITH_EPOLL_START \
     do { \
-        epoll_ctl(epollFd, EPOLL_CTL_ADD, config->openedSocket, &event); \
-        int readySockets = epoll_wait(epollFd, events, MAX_EVENTS, -1); \
-        if(readySockets){ } /*TODO: delete*/ \
-        for(unsigned i = 0; i < MAX_EVENTS; i++) { \
+        epoll_ctl(epollFd, EPOLL_CTL_ADD, config->openedSocket, &event);    \
+        int readySockets = epoll_wait(epollFd, events, MAX_EVENTS, 1);      \
+        if(readySockets){ } /*TODO: delete*/                                \
+        for(unsigned i = 0; i < MAX_EVENTS; i++) {                          \
             if (events[i].events & EPOLLIN) {
 
 #define LOOP_WITH_EPOLL_END \
@@ -44,7 +47,7 @@ void* protocolReceiver(void *vargp)
     BytesBlock commands[4]; // array of commands 
 
     Buffer serverResponse;
-    bufferClear(&serverResponse);
+    bufferInit(&serverResponse);
     bufferResize(&serverResponse, 1500); // set max size messages from server
 
     // Await response
@@ -63,10 +66,17 @@ void* protocolReceiver(void *vargp)
     event.events = EPOLLIN; //want to read
     event.data.fd = config->openedSocket;
 
+    struct timeval tv;
+    tv.tv_sec = 1;
+    // tv.tv_usec = 500000; /*set timeout for recvfrom to 500ms*/
+    if(setsockopt(config->openedSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv)))
+    {
+        errHandling("setsockopt() failed\n", 1); //TODO:
+    }
+
     // ------------------------------------------------------------------------
     // Set up variables for receiving messages
     // ------------------------------------------------------------------------
-
 
     LOOP_WITH_EPOLL_START
     {
@@ -74,7 +84,7 @@ void* protocolReceiver(void *vargp)
                                 serverResponse.allocated, flags, 
                                 config->serverAddress, &(config->serverAddressSize));
         
-        if(bytesRx <= 0) {errHandling("No bytes received", 1);} // TODO: / DEBUG:
+        if(bytesRx <= 0) {continue;}
         
         serverResponse.used = bytesRx; //set buffer length (activly used) bytes
         
@@ -82,7 +92,7 @@ void* protocolReceiver(void *vargp)
         
         #ifdef DEBUG
             printf("Received protocol:\n"); //DEBUG:
-            printBuffer(&serverResponse, 0, 1); //DEBUG:
+            bufferPrint(&serverResponse, 0, 1); //DEBUG:
         #endif
 
         if(msgID == config->comDetails->msgCounter  && msgType == MSG_CONF)
@@ -107,6 +117,7 @@ void* protocolReceiver(void *vargp)
                 udpRetries += 1;
             }
         }
+
     }
     LOOP_WITH_EPOLL_END
 

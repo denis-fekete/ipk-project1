@@ -167,9 +167,6 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
     buffer->data[2] = low;  
     *msgId = low +  (high << 8); 
 
-    printf("DEBUG: Received message type: %i\n", msgTypeInt);
-    printf("DEBUG: Message ID: %u\n", *msgId);
-
     first.start = &(buffer->data[3]);
     // ------------------------------------------------------------------------
 

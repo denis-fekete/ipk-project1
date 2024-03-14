@@ -26,7 +26,7 @@
  * 
  * @param buffer Buffer to be reseted
  */
-void bufferClear(Buffer* buffer);
+void bufferInit(Buffer* buffer);
 
 /**
  * @brief Resizes buffer to new size, if buffer is not
@@ -39,6 +39,14 @@ void bufferClear(Buffer* buffer);
 void bufferResize(Buffer* buffer, size_t newSize);
 
 /**
+ * @brief Copies contents from src buffer to dst
+ * 
+ * @param dst Buffer to which data will be copied
+ * @param src Buffer from which data will be copied
+ */
+void bufferCopy(Buffer* dst, Buffer* src);
+
+/**
  * @brief Fills buffer with characters from stdin.
  * 
  * Fills buffer character by character until EOF is found.
@@ -48,7 +56,6 @@ void bufferResize(Buffer* buffer, size_t newSize);
  * is required
  * @param bufferSize Pointer size of provided buffer
  */
-// size_t loadBuffer(char** buffer, size_t* bufferSize)
 size_t loadBufferFromStdin(Buffer* buffer);
 
 /**
@@ -59,6 +66,13 @@ size_t loadBufferFromStdin(Buffer* buffer);
  * @param smartfilter If not 0 (false) only alphanumeric chacters will be prited
  * as chracaters and other chars will be printed as hex codes
  */
-void printBuffer(Buffer* buffer, int hex, int smartfilter);
+void bufferPrint(Buffer* buffer, int hex, int smartfilter);
+
+/**
+ * @brief Destroys Buffer and frees memory
+ * 
+ * @param buffer 
+ */
+void bufferDestory(Buffer* buffer);
 
 #endif

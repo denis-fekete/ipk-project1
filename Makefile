@@ -4,11 +4,11 @@ OBJ_DIR = $(BUILD_DIR)/objects
 TARGET = program
 LIB_DIR = $(SRC_DIR)/libs
 
-CC = gcc
-CVERSTION = -std=c17
+CC = g++
+CVERSTION = -std=c++20
 LDFLAGS := -lm -lpcap -lnet
 
-CFLAGS = $(CVERSTION) -pedantic-errors -Wall -Wextra -Werror -g -DDEBUG -I$(LIB_DIR)
+CFLAGS = $(CVERSTION) -pthread -pedantic-errors -Wall -Wextra -Werror -g -DDEBUG -I$(LIB_DIR)
 
 SRCS := $(wildcard $(SRC_DIR)/*.c)
 LIB_SRCS := $(wildcard $(LIB_DIR)/*.c)

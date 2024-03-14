@@ -15,19 +15,28 @@
 #include "getopt.h" // argument processing
 #include "pthread.h"
 
-#include "../tests/clientXserver.h"
-
 #include "libs/customtypes.h"
 #include "libs/buffer.h"
 #include "libs/utils.h"
 #include "libs/networkCom.h"
 #include "libs/ipk24protocol.h"
+#include "libs/msgQueue.h"
+
+#include "unistd.h"
 
 #include "protocolReceiver.h"
 #include "protocolSender.h"
 
 // Global variable shared between files to signalize whenever loops should continue
 bool continueProgram = true;
+MessageQueue* sendingQueue; // queue of outcoming (user sent) messages
+MessageQueue* receivedQueue; // queue of incoming (server sent) messages
+NetworkConfig config; // store network configuration / settings 
+pthread_cond_t pingSenderCond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t pingSenderMutex = PTHREAD_MUTEX_INITIALIZER;
+
+pthread_cond_t pingMainCond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t pingMainMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // ----------------------------------------------------------------------------
 //
@@ -44,9 +53,11 @@ void printHelpMenu()
  * @param argc Number of arguments given
  * @param argv Array of arguments strings (char pointers)
  */
+
 void processArguments(int argc, char* argv[], enum Protocols* prot, Buffer* ipAddress, uint16_t* portNum, uint16_t* udpTimeout, uint8_t* udpRetrans)
 {
     int opt;
+    size_t optLen;
     while((opt = getopt(argc, argv, "ht:s:p:d:r:")) != -1)
     {
         switch (opt)
@@ -65,15 +76,18 @@ void processArguments(int argc, char* argv[], enum Protocols* prot, Buffer* ipAd
             }
             break;
         case 's': ; // compiler doesn't like size_t being after : 
-            size_t optLen = strlen(optarg);
+            optLen = strlen(optarg);
             bufferResize(ipAddress, optLen);
             stringReplace(ipAddress->data, optarg, optLen);
             break;
-        case 'p': *portNum = (uint16_t)atoi(optarg);
+        case 'p':
+            *portNum = (uint16_t)atoi(optarg);
             break;
-        case 'd': *udpTimeout = (uint16_t)atoi(optarg);
+        case 'd':
+            *udpTimeout = (uint16_t)atoi(optarg);
             break;
-        case 'r': *udpRetrans = (uint8_t)atoi(optarg);
+        case 'r':
+            *udpRetrans = (uint8_t)atoi(optarg);
             break;
         default:
             errHandling("Unknown option. Use -h for help", 1); //TODO: change err code
@@ -135,6 +149,20 @@ void storeInformation(cmd_t cmdType, BytesBlock commands[4], CommunicationDetail
 int main(int argc, char* argv[])
 {
     // ------------------------------------------------------------------------
+    //
+    // ------------------------------------------------------------------------
+
+    continueProgram = true;
+
+    sendingQueue = (MessageQueue*) malloc(sizeof(MessageQueue));
+    if(sendingQueue == NULL) {errHandling("Failed malloc for sendingQueue", 1); /*TODO:*/};
+    receivedQueue = (MessageQueue*) malloc(sizeof(MessageQueue));
+    if(receivedQueue == NULL) {errHandling("Failed malloc for receivedQueue", 1); /*TODO:*/};
+
+    queueInit(sendingQueue); // queue of outcoming (user sent) messages
+    queueInit(receivedQueue); // queue of incoming (server sent) messages
+
+    // ------------------------------------------------------------------------
     // Process arguments from user
     // ------------------------------------------------------------------------
 
@@ -144,9 +172,8 @@ int main(int argc, char* argv[])
     // Use buffer for storing ip address, 
     // then used for storing client input / commanads
     Buffer clientCommands; // 
-    bufferClear(&clientCommands);
+    bufferInit(&clientCommands);
 
-    NetworkConfig config; // store network configuration / settings 
     DEFAULT_NETWORK_CONFIG(config);
 
     processArguments(argc, argv, &(config.protocol), &clientCommands, 
@@ -182,25 +209,27 @@ int main(int argc, char* argv[])
     // Declaring and initializing variables need for communication
     // ------------------------------------------------------------------------
 
-    int flags = 0; //TODO: check if some usefull flags could be done
     cmd_t cmdType; // variable to store current command typed by user
 
     Buffer protocolMsg;
-    bufferClear(&protocolMsg);
+    bufferInit(&protocolMsg);
 
-    // Buffer clientCommands; bufferClear(&clientCommands); // Moved up for reusability
+    // Buffer clientCommands; bufferInit(&clientCommands); // Moved up for reusability
     
     CommunicationDetails comDetails;
     comDetails.msgCounter = 0;
 
-    bufferClear(&(comDetails.displayName));
-    bufferClear(&(comDetails.channelID));
+    bufferInit(&(comDetails.displayName));
+    bufferInit(&(comDetails.channelID));
 
     BytesBlock commands[4];
 
     // ------------------------------------------------------------------------
     // Setup second thread that will handle data receiving
     // ------------------------------------------------------------------------
+
+    // get id of main thread before any threads are called
+    pthread_t mainID = pthread_self();
 
     config.comDetails = &comDetails;
 
@@ -210,11 +239,15 @@ int main(int argc, char* argv[])
     pthread_t protSender;
     pthread_create(&protSender, NULL, protocolSender, &config);
 
+    // get current thread id
+    pthread_t threadID = pthread_self();
+
+
     // ------------------------------------------------------------------------
     // Loop of communication
     // ------------------------------------------------------------------------
-    
-    do 
+    // continue while continueProgram is true, only main id can go into this loop
+    while (continueProgram && threadID == mainID)
     {
         // --------------------------------------------------------------------
         // Convert user input into an protocol
@@ -231,31 +264,30 @@ int main(int argc, char* argv[])
         // Assembles array of bytes into Buffer protocolMsg, returns if 
         // message can be trasmitted   
         canBeSended = assembleProtocol(cmdType, commands, &protocolMsg, &comDetails);
-        printf("Assembling protocol:\n"); //DEBUG:
-        printBuffer(&protocolMsg, 0, 1); //DEBUG:
 
-        int bytesTx; // number of sended bytes
         if(canBeSended)
         {
-            // send buffer to the server 
-            bytesTx = sendto(config.openedSocket, protocolMsg.data, 
-                            protocolMsg.used, flags, config.serverAddress, 
-                            config.serverAddressSize);
-
-            if(bytesTx < 0)
+            // if sendingQueue is empty, sender is asleep waiting
+            // wake him up
+            if(queueIsEmpty(sendingQueue))
             {
-                errHandling("Sending bytes was not successful", 1); // TODO: change error code
+                pthread_cond_signal(&pingSenderCond);
             }
-        } 
-        else
-        {
-            //DEBUG:
-            errHandling("Wrong message contents, assembleProtocol() didn't allow message to be sent", 1);
+            // add message to the queue
+            queueAddMessage(sendingQueue, &protocolMsg);
         }
         
+        for(size_t i = 0; i < protocolMsg.allocated; i++)
+        { protocolMsg.data[i] = 0; }
+
         // Exit loop if /exit detected 
-        if(cmdType == CMD_EXIT) { continueProgram = false; }
-    } while (continueProgram);
+        if(cmdType == CMD_EXIT)
+        { 
+            // wake up sender to exit
+            pthread_cond_signal(&pingSenderCond);
+            continueProgram = false;
+        }
+    }
 
     #ifdef DEBUG
         printf("DEBUG: Communicaton ended with %u messages\n", comDetails.msgCounter); //DEBUG: delete
@@ -264,6 +296,7 @@ int main(int argc, char* argv[])
     // Closing up communication
     // ------------------------------------------------------------------------
 
+    printf("main thread ended loop\n");
     pthread_join(protReceiver, NULL);
     pthread_join(protSender, NULL);
 
