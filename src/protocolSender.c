@@ -8,6 +8,7 @@
  */
 
 #include "protocolSender.h"
+#include "sys/time.h"
 
 extern bool continueProgram;
 extern NetworkConfig config;
@@ -17,23 +18,32 @@ extern pthread_mutex_t pingSenderMutex;
 extern pthread_cond_t pingMainCond;
 extern pthread_mutex_t pingMainMutex;
 
+#define TIMEOUT_CALCULATION(millis)                         \
+    gettimeofday(&timeNow, NULL);                           \
+    timeToWait.tv_sec = timeNow.tv_sec + millis / 1000;     \
+    timeToWait.tv_nsec = timeNow.tv_usec * 1000 + 1000 * 1000 * (millis % 1000);\
+    timeToWait.tv_sec += timeToWait.tv_nsec / (1000 * 1000 * 1000);             \
+    timeToWait.tv_nsec %= (1000 * 1000 * 1000);
+
 void* protocolSender(void* vargp)
 {
     if(vargp) {} // Fool compiler
 
     int flags = 0; //TODO: check if some usefull flags could be done
-    if(flags){}
+    if(flags){} // DEBUG:
     
+    struct timespec timeToWait; // time variable for timeout calculation
+    struct timeval timeNow; // time variable for timeout calculation
+
     do 
     {
         // if queue is empty wait until it is filled
-        
         if(queueIsEmpty(sendingQueue))
         {
-            printf("waiting\n");
-            // use pthread wait to not waste cpu power
-            pthread_cond_wait(&pingSenderCond, &pingSenderMutex);
-            printf("resuming\n");
+            TIMEOUT_CALCULATION(config.udpTimeout);
+            // use pthread wait for main thread to ping that queue is not 
+            // empty or timeout to expire
+            pthread_cond_timedwait(&pingSenderCond, &pingSenderMutex, &timeToWait);
             continue;
         }
 

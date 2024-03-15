@@ -17,7 +17,6 @@
 #include "libs/utils.h"
 #include "libs/networkCom.h"
 #include "libs/ipk24protocol.h"
-#include "libs/protocolHandler.hpp"
 #include "libs/msgQueue.h"
 
 

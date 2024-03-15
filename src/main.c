@@ -282,7 +282,8 @@ int main(int argc, char* argv[])
 
         // Exit loop if /exit detected 
         if(cmdType == CMD_EXIT)
-        { 
+        {
+            sleep(10);
             // wake up sender to exit
             pthread_cond_signal(&pingSenderCond);
             continueProgram = false;
