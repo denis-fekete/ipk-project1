@@ -32,11 +32,11 @@ bool continueProgram = true;
 MessageQueue* sendingQueue; // queue of outcoming (user sent) messages
 MessageQueue* receivedQueue; // queue of incoming (server sent) messages
 NetworkConfig config; // store network configuration / settings 
-pthread_cond_t pingSenderCond = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t pingSenderMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t main2SenderCond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t main2SenderMutex = PTHREAD_MUTEX_INITIALIZER;
 
-pthread_cond_t pingMainCond = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t pingMainMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t rec2SenderCond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t rec2SenderMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // ----------------------------------------------------------------------------
 //
@@ -146,6 +146,10 @@ void storeInformation(cmd_t cmdType, BytesBlock commands[4], CommunicationDetail
 //
 // ----------------------------------------------------------------------------
 
+//DEBUG:
+#define CMD_EXIT_SKIP_START if(cmdType != CMD_EXIT) {
+#define CMD_EXIT_SKIP_END }
+
 int main(int argc, char* argv[])
 {
     // ------------------------------------------------------------------------
@@ -228,9 +232,6 @@ int main(int argc, char* argv[])
     // Setup second thread that will handle data receiving
     // ------------------------------------------------------------------------
 
-    // get id of main thread before any threads are called
-    pthread_t mainID = pthread_self();
-
     config.comDetails = &comDetails;
 
     pthread_t protReceiver;
@@ -239,25 +240,24 @@ int main(int argc, char* argv[])
     pthread_t protSender;
     pthread_create(&protSender, NULL, protocolSender, &config);
 
-    // get current thread id
-    pthread_t threadID = pthread_self();
-
-
     // ------------------------------------------------------------------------
     // Loop of communication
     // ------------------------------------------------------------------------
     // continue while continueProgram is true, only main id can go into this loop
-    while (continueProgram && threadID == mainID)
+    while (continueProgram)
     {
         // --------------------------------------------------------------------
         // Convert user input into an protocol
         // --------------------------------------------------------------------
         bool canBeSended;
+        bool eofDetected = false;
         // Load buffer from stdin, store length of buffer
-        clientCommands.used = loadBufferFromStdin(&clientCommands);
+        clientCommands.used = loadBufferFromStdin(&clientCommands, &eofDetected);
         // Separate clientCommands buffer into commands (ByteBlocks),
         // store recognized command
-        cmdType = userInputToCmds(&clientCommands, commands);
+        cmdType = userInputToCmds(&clientCommands, commands, &eofDetected);
+
+
         if(cmdType == NONE) { continue; }
         // store commands into comDetails for future use in other commands
         storeInformation(cmdType, commands, &comDetails);
@@ -271,20 +271,21 @@ int main(int argc, char* argv[])
             // wake him up
             if(queueIsEmpty(sendingQueue))
             {
-                pthread_cond_signal(&pingSenderCond);
+                pthread_cond_signal(&main2SenderCond);
             }
             // add message to the queue
             queueAddMessage(sendingQueue, &protocolMsg);
+            comDetails.msgCounter += 1;
         }
         
-        for(size_t i = 0; i < protocolMsg.allocated; i++)
-        { protocolMsg.data[i] = 0; }
+        //TODO: check if necessary
 
         // Exit loop if /exit detected 
         if(cmdType == CMD_EXIT)
         {
+            sleep(2);
             // wake up sender to exit
-            pthread_cond_signal(&pingSenderCond);
+            pthread_cond_signal(&main2SenderCond);
             continueProgram = false;
         }
     }
@@ -296,7 +297,6 @@ int main(int argc, char* argv[])
     // Closing up communication
     // ------------------------------------------------------------------------
 
-    printf("main thread ended loop\n");
     pthread_join(protReceiver, NULL);
     pthread_join(protSender, NULL);
 
@@ -310,7 +310,7 @@ int main(int argc, char* argv[])
     free(sendingQueue);
     free(receivedQueue);
 
-    // pthread_mutex_destroy(&pingSenderMutex);
-    // pthread_mutex_destroy(&pingMainMutex);
+    // pthread_mutex_destroy(&main2SenderMutex);
+    // pthread_mutex_destroy(&rec2SenderMutex);
     return 0;
 }

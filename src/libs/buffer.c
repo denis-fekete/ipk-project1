@@ -89,7 +89,7 @@ void bufferCopy(Buffer* dst, Buffer* src)
  * is required
  * @param bufferSize Pointer size of provided buffer
  */
-size_t loadBufferFromStdin(Buffer* buffer)
+size_t loadBufferFromStdin(Buffer* buffer, bool* eofDetected)
 {
     char c = getc(stdin);
     
@@ -110,6 +110,8 @@ size_t loadBufferFromStdin(Buffer* buffer)
         buffer->data[i] = c;
         c = getc(stdin);
     }
+
+    if(c == EOF) { *eofDetected = true; }
 
     // Add 0 to the end of string
     buffer->data[i] = '\0';

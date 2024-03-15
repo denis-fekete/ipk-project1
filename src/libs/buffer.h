@@ -65,7 +65,7 @@ void bufferCopy(Buffer* dst, Buffer* src);
  * is required
  * @param bufferSize Pointer size of provided buffer
  */
-size_t loadBufferFromStdin(Buffer* buffer);
+size_t loadBufferFromStdin(Buffer* buffer, bool* eofDetected);
 
 /**
  * @brief Prints buffer characters byte by byte from start to used

@@ -40,5 +40,13 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
  * @param commands Array of commands where separated commands will be store 
  * @return Returns type of recognized command (enum CommandType)
  */
-cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4]);
+cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4], bool* eofDetected);
+
+/**
+ * @brief Converts bwo bytes from input char array into 16bit usigned integer
+ * 
+ * @param buffer Input char array
+ * @return u_int16_t 
+ */
+u_int16_t convert2BytesToUInt(char* input);
 #endif

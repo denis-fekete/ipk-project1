@@ -107,4 +107,42 @@ void queueMessageSended(MessageQueue* queue);
  */
 u_int8_t queueGetSendedCounter(MessageQueue* queue);
 
+/**
+ * @brief Return pointer to the first message but don't unlock queue.
+ * 
+ * Usage:
+ * Buffer* b = queueGetMessageNoUnlock(queue_ptr); 
+ * // ... do something with b 
+ * queueUnlock(queue_ptr);
+ * 
+ * @warning queueUnlock() must be called after this function.
+ * @param queue Queue from which the message will be returned 
+ * @return Message* 
+ */
+Buffer* queueGetMessageNoUnlock(MessageQueue* queue);
+
+/**
+ * @brief Unlock queue
+ * 
+ * Usage:
+ * Buffer* b = queueGetMessageNoUnlock(queue_ptr); 
+ * // ... do something with b 
+ * queueUnlock(queue_ptr);
+ * 
+ * @warning DO NOT USE! if you haven't read documentation.
+ * 
+ * @param queue Queue to be unlocked
+ */
+void queueUnlock(MessageQueue* queue);
+
+/**
+ * @brief Deletes first message and moves queue forward
+ * 
+ * @warning This function doesn't use mutexes and is not reentrant,
+ * so prevention of data corruption is on programmer
+ * 
+ * @param queue Queue from which will be the message deleted
+ */
+void queuePopMessageNoMutex(MessageQueue* queue);
+
 #endif

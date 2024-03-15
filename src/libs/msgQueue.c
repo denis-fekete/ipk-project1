@@ -48,6 +48,11 @@ void queueDestroy(MessageQueue* queue)
 /**
  * @brief Return pointer to the first message 
  * 
+ * @warning This function does not quarantee that the pointer won't be 
+ * freed leading undefined behavior or Segmentation Fault. Use 
+ * queueGetMessageNoUnlock() instead ... however incorrect use of this
+ * function may lead to queue ending in locked state.
+ * 
  * @param queue Queue from which the message will be returned 
  * @return Message* 
  */
@@ -63,6 +68,46 @@ Buffer* queueGetMessage(MessageQueue* queue)
     THREAD_UNLOCK;
     errHandling("Asking for non-existing message, this is implementation error", 1); // DEBUG: this shouldn't be needed
     return NULL;
+}
+
+/**
+ * @brief Return pointer to the first message but don't unlock queue.
+ * 
+ * Usage:
+ * Buffer* b = queueGetMessageNoUnlock(queue_ptr); 
+ * // ... do something with b 
+ * queueUnlock(queue_ptr);
+ * 
+ * @warning queueUnlock() must be called after this function.
+ * @param queue Queue from which the message will be returned 
+ * @return Message* 
+ */
+Buffer* queueGetMessageNoUnlock(MessageQueue* queue)
+{
+    THREAD_LOCK;
+    if(queue->len > 0 && queue->first != NULL)
+    {
+        return queue->first->buffer;
+    }
+
+    return NULL;
+}
+
+/**
+ * @brief Unlock queue
+ * 
+ * Usage:
+ * Buffer* b = queueGetMessageNoUnlock(queue_ptr); 
+ * // ... do something with b 
+ * queueUnlock(queue_ptr);
+ * 
+ * @warning DO NOT USE! if you haven't read documentation.
+ * 
+ * @param queue Queue to be unlocked
+ */
+void queueUnlock(MessageQueue* queue)
+{
+    THREAD_UNLOCK;
 }
 
 /**
@@ -148,6 +193,35 @@ void queuePopMessage(MessageQueue* queue)
 }
 
 /**
+ * @brief Deletes first message and moves queue forward
+ * 
+ * @warning This function doesn't use mutexes and is not reentrant,
+ * so prevention of data corruption is on programmer
+ * 
+ * @param queue Queue from which will be the message deleted
+ */
+void queuePopMessageNoMutex(MessageQueue* queue)
+{
+    if(queue->len <= 0)
+    {
+        return;
+    }
+
+    // store old first
+    Message* oldFirst = queue->first;
+    // set queue first to message behind old first message
+    queue->first = oldFirst->behindMe;
+
+    // destroy message
+    bufferDestory(oldFirst->buffer); // buffer.data
+    free(oldFirst->buffer); // buffer pointer
+    free(oldFirst); // message pointer
+
+    // decrease size of queue
+    queue->len -= 1;
+}
+
+/**
  * @brief Check if MessageQueue is empty
  * 
  * @param queue Queue to be checked
@@ -160,7 +234,7 @@ bool queueIsEmpty(MessageQueue* queue)
     {
         errHandling("In queueIsEmpty(), uninitialized queue was passed as argument", 1); //TODO:
     }
-
+    
     THREAD_LOCK;
     if(queue->len == 0){
         THREAD_UNLOCK;

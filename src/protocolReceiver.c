@@ -12,7 +12,12 @@
 
 extern bool continueProgram;
 extern NetworkConfig config;
-extern MessageQueue receivedQueue;
+extern MessageQueue* receivedQueue;
+extern MessageQueue* sendingQueue;
+
+extern pthread_cond_t rec2SenderCond;
+extern pthread_mutex_t rec2SenderMutex;
+
 
 // use macro for loop overhead because it would be too much tabulators
 #define LOOP_WITH_EPOLL_START \
@@ -43,7 +48,6 @@ void* protocolReceiver(void *vargp)
     // ------------------------------------------------------------------------
     NetworkConfig* config = (NetworkConfig*) vargp;
 
-    uint8_t udpRetries = 0; // number of times that udp retransmission was sent
     BytesBlock commands[4]; // array of commands 
 
     Buffer serverResponse;
@@ -90,38 +94,44 @@ void* protocolReceiver(void *vargp)
         
         disassebleProtocol(&serverResponse, commands, &msgType, &msgID);
         
+        Buffer* topOfQueue = NULL;
+        switch(msgType)
+        {
+            case MSG_CONF:
+                // get pointer to the first queue
+                topOfQueue = queueGetMessageNoUnlock(sendingQueue);
+
+                // check if top is not empty
+                if(topOfQueue != NULL)
+                {
+                    u_int16_t queueTopMsgID = convert2BytesToUInt(topOfQueue->data);
+                
+                    if(msgID == queueTopMsgID)
+                    {
+                        queuePopMessageNoMutex(sendingQueue);
+                        
+                        pthread_cond_signal(&rec2SenderCond);
+                        printf("DEBUG: Confirmed message: %i\n", queueTopMsgID);
+                    }
+                }
+
+                queueUnlock(sendingQueue);
+                break;
+            case MSG_BYE:
+                continueProgram = false;
+                break;
+            default: break;
+        }
+
         #ifdef DEBUG
-            printf("Received protocol:\n"); //DEBUG:
+            printf("Received protocol, type: (%i), contents:\n", msgType); //DEBUG:
             bufferPrint(&serverResponse, 0, 1); //DEBUG:
         #endif
-
-        if(msgID == config->comDetails->msgCounter  && msgType == MSG_CONF)
-        {
-            // increase message counter, only if message was confirmed
-            config->comDetails->msgCounter += 1;
-
-            udpRetries = 0; // reset retrasmission counter
-        }
-        else
-        {
-            // Check if there was more udp retramissions then max value
-            // if yes thow away packet and get new user input  
-            if(udpRetries >= config->udpMaxRetries)
-            {
-                fprintf(stderr, "Packet thrown aways\n"); //TODO: do someting else
-                udpRetries = 0;
-            }
-            else
-            {
-                // Message was not properly received, try again
-                udpRetries += 1;
-            }
-        }
-
     }
     LOOP_WITH_EPOLL_END
 
     free(serverResponse.data);
+    printf("Receiver ended\n");
 
     return NULL;
 }

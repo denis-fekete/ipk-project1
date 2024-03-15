@@ -31,7 +31,9 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
     case PLAIN_MSG: buffer->data[0] = MSG_MSG; break;
     case CMD_EXIT: 
         buffer->data[0] = (char) MSG_BYE;
-        return true; break;
+        buffer->used = 1;
+        return true; 
+        break;
     default: errHandling("Unknown command type in assembleProtocol() function", 1) /*TODO: change error code*/; break;
     }
     ptrPos += 1;
@@ -138,6 +140,25 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
 //
 // ----------------------------------------------------------------------------
 
+/**
+ * @brief Converts bwo bytes from input char array into 16bit usigned integer
+ * 
+ * @param buffer Input char array
+ * @return u_int16_t 
+ */
+u_int16_t convert2BytesToUInt(char* input)
+{
+    // Get msgId
+    unsigned char high = input[1];
+    unsigned char low = input[2];
+
+    // Join bytes into one number
+    input[1] = high;  
+    input[2] = low;  
+    return (low +  (high << 8)); 
+}
+
+
 #define BBLOCK_END(block) &(block.start[block.len]);
 #define BBLOCK_END_W_ZERO_BYTE(block) &(block.start[block.len + 1]);
 #define TYPE_ID_LEN 3
@@ -158,15 +179,8 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
     // Get msg type
     u_int8_t msgTypeInt = (u_int8_t) (buffer->data[0]);
     
-    // Get msgId
-    unsigned char high = buffer->data[1];
-    unsigned char low = buffer->data[2];
-
-    // Join bytes into one number
-    buffer->data[1] = high;  
-    buffer->data[2] = low;  
-    *msgId = low +  (high << 8); 
-
+    *msgId = convert2BytesToUInt(buffer->data);
+    
     first.start = &(buffer->data[3]);
     // ------------------------------------------------------------------------
 
@@ -242,19 +256,25 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
  * @param commands Array of commands where separated commands will be store 
  * @return Returns type of recognized command (enum CommandType)
  */
-cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4])
+cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4], bool* eofDetected)
 {
     // If buffer is not filled skip
     if(buffer->used <= 0) { return NONE; }
+
 
     size_t index = findBlankCharInString(buffer->data, buffer->used);
     BytesBlock cmd = {.start=buffer->data, .len=index};
 
     BytesBlock first = {NULL, 0}, second = {NULL, 0}, third = {NULL, 0};
 
+        
     cmd_t type;
 
-    if(strncmp(cmd.start, "/auth", cmd.len) == 0)
+    if(*eofDetected)
+    {
+        type = CMD_EXIT;
+    }
+    else if(strncmp(cmd.start, "/auth", cmd.len) == 0)
     {
         getWord(&first, &(cmd.start[cmd.len]), buffer->used - (cmd.len));
         getWord(&second, &(first.start[first.len]), buffer->used - (cmd.len + first.len));
