@@ -283,7 +283,6 @@ int main(int argc, char* argv[])
         // Exit loop if /exit detected 
         if(cmdType == CMD_EXIT)
         {
-            sleep(10);
             // wake up sender to exit
             pthread_cond_signal(&pingSenderCond);
             continueProgram = false;
@@ -306,6 +305,12 @@ int main(int argc, char* argv[])
     free(comDetails.channelID.data);
     free(clientCommands.data);
     free(protocolMsg.data);
+    queueDestroy(sendingQueue);
+    queueDestroy(receivedQueue);
+    free(sendingQueue);
+    free(receivedQueue);
 
+    // pthread_mutex_destroy(&pingSenderMutex);
+    // pthread_mutex_destroy(&pingMainMutex);
     return 0;
 }

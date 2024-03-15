@@ -9,6 +9,7 @@
 
 #include "buffer.h"
 
+
 /**
  * @brief Sets default values to the buffer
  * 
@@ -47,8 +48,8 @@ void bufferResize(Buffer* buffer, size_t newSize)
         exit(1); // TODO: error code change
     }
     // Save new value to buffer and bufferSize
-    buffer->allocated = newSize;
     buffer->data = tmp;
+    buffer->allocated = newSize;
 }
 
 /**
@@ -159,6 +160,5 @@ void bufferPrint(Buffer* buffer, int hex, int smallfilter)
  */
 void bufferDestory(Buffer* buffer)
 {
-    printf("Destroying pointer %p\n", (void*)buffer->data);
     free(buffer->data);
 }

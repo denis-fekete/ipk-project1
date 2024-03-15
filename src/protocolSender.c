@@ -37,6 +37,7 @@ void* protocolSender(void* vargp)
 
     do 
     {
+
         // if queue is empty wait until it is filled
         if(queueIsEmpty(sendingQueue))
         {
@@ -44,6 +45,13 @@ void* protocolSender(void* vargp)
             // use pthread wait for main thread to ping that queue is not 
             // empty or timeout to expire
             pthread_cond_timedwait(&pingSenderCond, &pingSenderMutex, &timeToWait);
+            continue;
+        }
+
+        // check if message was sended more than maxRetries
+        if(queueGetSendedCounter(sendingQueue) > (config.udpMaxRetries))
+        {
+            queuePopMessage(sendingQueue);//TODO: print some error
             continue;
         }
 
@@ -61,12 +69,12 @@ void* protocolSender(void* vargp)
             errHandling("Sending bytes was not successful", 1); // TODO: change error code
         }
 
+        queueMessageSended(sendingQueue);
+
         #ifdef DEBUG
             printf("Protocol sended sucessfully\n"); // DEBUG:
             bufferPrint(msgToBeSend, 0, 1);
         #endif
-
-        queuePopMessage(sendingQueue);
 
     // repeat until continueProgram is false and queue is empty
     } while( continueProgram || !(queueIsEmpty(sendingQueue)) );

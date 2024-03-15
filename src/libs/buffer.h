@@ -19,6 +19,15 @@
 
 #define INITIAL_BUFFER_SIZE 256
 
+/* MOVED TO CUSTOMTYPES.H
+typedef struct Buffer
+{
+    char* data;
+    size_t allocated ;
+    size_t used;
+} Buffer;
+*/
+
 /**
  * @brief Sets default values to the buffer
  * 

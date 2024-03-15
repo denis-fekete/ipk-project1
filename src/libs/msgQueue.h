@@ -22,6 +22,8 @@
 typedef struct Message {
     Buffer* buffer;
     struct Message* behindMe;
+    bool confirmed;
+    u_int8_t sendCount;
 } Message;
 
 typedef struct MessageQueue {
@@ -89,5 +91,20 @@ bool queueIsEmpty(MessageQueue* queue);
  */
 size_t queueLength(MessageQueue* queue);
 
+
+/**
+ * @brief Adds ONE to sended counter of first message 
+ * 
+ * @param queue queue to which first message counter will be incremented
+ */
+void queueMessageSended(MessageQueue* queue);
+
+/**
+ * @brief Returns number of times this message was sended 
+ * 
+ * @param queue queue from which first message will be checked
+ * @return u_int8_t number of times first message in queue was sended 
+ */
+u_int8_t queueGetSendedCounter(MessageQueue* queue);
 
 #endif

@@ -33,7 +33,7 @@ void queueInit(MessageQueue* queue)
  */
 void queueDestroy(MessageQueue* queue)
 {
-    for(unsigned i = 0; i < queue->len; i++)
+    while(queue->len != 0)
     {
         queuePopMessage(queue);
     }
@@ -73,7 +73,6 @@ Buffer* queueGetMessage(MessageQueue* queue)
  */
 void queueAddMessage(MessageQueue* queue, Buffer* buffer)
 {
-    THREAD_LOCK;
 
     Message* tmp_msg = (Message*) malloc(sizeof(Message));
 
@@ -90,27 +89,26 @@ void queueAddMessage(MessageQueue* queue, Buffer* buffer)
         errHandling("Malloc failed in queueAddMessage() for Buffer", 1); // TODO: change err code
     }
 
+    // set default values to the message attributes
     bufferInit(tmp_buffer);
+    tmp_msg->sendCount = 0;
 
     // Copies input buffer to the new message
     bufferCopy(tmp_buffer, buffer);
 
     tmp_msg->buffer = tmp_buffer;
 
-    if(queue->last != NULL) 
-    {
-        // set new message behind last message from queue    
-        queue->last->behindMe = tmp_msg;
-    }
 
-    if(queue->first == NULL)
-    {
-        queue->first = tmp_msg;
-    }
+    THREAD_LOCK;
+    // if queue doesn't have first, set this msg as first
+    if(queue->first == NULL) { queue->first = tmp_msg; }
 
+    // set new message behind last message if exits    
+    if(queue->last != NULL) { queue->last->behindMe = tmp_msg; }
     // set new message as last
     queue->last = tmp_msg;
-    // set new message's behindMe message to NULL
+
+    // set new message's behindMe value to NULL
     queue->last->behindMe = NULL;
     // increase queue size
     queue->len += 1;
@@ -139,8 +137,9 @@ void queuePopMessage(MessageQueue* queue)
     queue->first = oldFirst->behindMe;
 
     // destroy message
-    // bufferDestory(oldFirst->buffer);
-    // free(oldFirst);
+    bufferDestory(oldFirst->buffer); // buffer.data
+    free(oldFirst->buffer); // buffer pointer
+    free(oldFirst); // message pointer
 
     // decrease size of queue
     queue->len -= 1;
@@ -180,12 +179,39 @@ bool queueIsEmpty(MessageQueue* queue)
  */
 size_t queueLength(MessageQueue* queue)
 {
-    THREAD_LOCK
+    THREAD_LOCK;
     size_t currValue = queue->len;
-    THREAD_UNLOCK
+    THREAD_UNLOCK;
 
     return currValue;
 }
+
+/**
+ * @brief Adds ONE to sended counter of first message 
+ * 
+ * @param queue queue to which first message counter will be incremented
+ */
+void queueMessageSended(MessageQueue* queue)
+{
+    THREAD_LOCK;
+    queue->first->sendCount += 1;
+    THREAD_UNLOCK;
+}
+
+/**
+ * @brief Returns number of times this message was sended 
+ * 
+ * @param queue queue from which first message will be checked
+ * @return u_int8_t number of times first message in queue was sended 
+ */
+u_int8_t queueGetSendedCounter(MessageQueue* queue)
+{
+    THREAD_LOCK;
+    u_int8_t val = queue->first->sendCount;
+    THREAD_UNLOCK;
+    return val;
+}
+
 
 #undef THREAD_LOCK
 #undef THREAD_UNLOCK
