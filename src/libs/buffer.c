@@ -127,32 +127,27 @@ size_t loadBufferFromStdin(Buffer* buffer, bool* eofDetected)
  * @param smartfilter If not 0 (false) only alphanumeric chacters will be prited
  * as chracaters and other chars will be printed as hex codes
  */
-void bufferPrint(Buffer* buffer, int hex, int smallfilter)
+void bufferPrint(Buffer* buffer, bool useDebugPrint)
 {
     if(buffer->data == NULL || buffer->used == 0) { return; }
 
     for(size_t i = 0; i < buffer->used; i++)
     {
-        if(hex) { printf("%hhx ", (unsigned char)buffer->data[i]); }
+        char c = buffer->data[i];
+        if( (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
+        {
+            if(useDebugPrint) { debugPrint(stdout, "%c", c); }
+            else { printf("%c", c); }
+        }
         else
         {
-            if(smallfilter)
-            {
-                char c = buffer->data[i];
-                if( (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
-                {
-                    printf("%c", c);
-                }
-                else 
-                {
-                    printf("(%hhx)", (unsigned char)c);
-                }
-            }
-            else { printf("%c", buffer->data[i]); }
+            if(useDebugPrint) { debugPrint(stdout, "(%hhx)", (unsigned char)c); }
+            else { printf("(%hhx)", (unsigned char)c); }
         }
     }
 
-    printf("\n");
+    if(useDebugPrint) { debugPrint(stdout, "\n"); }
+    else { printf("\n"); }
 }
 
 /**

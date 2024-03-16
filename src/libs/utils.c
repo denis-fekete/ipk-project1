@@ -112,28 +112,6 @@ int isEndingCharacter(char input)
     return 1;
 }
 
-// ----------------------------------------------------------------------------
-//
-// ----------------------------------------------------------------------------
-
-void printByteBlock(BytesBlock* block, int hex)
-{
-    if(block->start == NULL || block->len == 0) { return; }
-
-    for(size_t i = 0; i < block->len; i++)
-    {
-        if(hex)
-        {
-            printf("%x ", (block->start)[i]);
-        }
-        else
-        {
-            printf("%c", (block->start)[i]);
-        }
-    }
-
-    printf("\n");
-}
 
 // ----------------------------------------------------------------------------
 //

@@ -49,9 +49,7 @@ struct sockaddr_in findServer(const char* serverHostname, uint16_t serverPort)
     serverAddress.sin_port = htons(serverPort);
     memcpy(&serverAddress.sin_addr.s_addr, server->h_addr_list[0], server->h_length);
     
-    #ifdef DEBUG
-    printf("DEBUG: Server socket %s : %d \n", inet_ntoa(serverAddress.sin_addr), ntohs(serverAddress.sin_port));
-    #endif
+    debugPrint(stdout, "DEBUG: Server socket %s : %d \n", inet_ntoa(serverAddress.sin_addr), ntohs(serverAddress.sin_port));
     
     return serverAddress;
 }

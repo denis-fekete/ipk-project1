@@ -42,7 +42,7 @@ void* protocolSender(void* vargp)
         if(queueGetSendedCounter(sendingQueue) > (progInt->netConfig->udpMaxRetries))
         {
             queuePopMessage(sendingQueue);//TODO: print some error
-            printf("System: Request timed out. Last message was not sent.\n");
+            safePrintStdout("System: Request timed out. Last message was not sent.\n");
             continue;
         }
 
@@ -62,10 +62,8 @@ void* protocolSender(void* vargp)
 
         queueMessageSended(sendingQueue);
 
-        #ifdef DEBUG
-            printf("Sended:\n"); // DEBUG:
-            bufferPrint(msgToBeSend, 0, 1);
-        #endif
+        debugPrint(stdout, "Sender sended a message:\n"); // DEBUG:
+        bufferPrint(msgToBeSend, true);
 
         // if DO_NOT_RESEND flags is set, delete msg from queue right away
         if(queueGetMessageFlags(sendingQueue) == msg_flag_DO_NOT_RESEND)
@@ -82,6 +80,6 @@ void* protocolSender(void* vargp)
     // repeat until continueProgram is false and queue is empty
     } while( progInt->threads->continueProgram || !(queueIsEmpty(sendingQueue)) );
 
-    printf("Sender ended\n");
+    debugPrint(stdout, "DEBUG: Sender ended\n");
     return NULL;
 }

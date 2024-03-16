@@ -69,6 +69,8 @@ typedef struct ThreadCommunication {
     bool continueProgram; // variable to signal that program should prepare for finishing
     fsm_t fsmState; // state of FSM, how should program behave 
 
+    pthread_mutex_t* stdoutMutex;
+
     struct MessageQueue* sendingQueue; // queue of outcoming (user sent) messages
     struct MessageQueue* receivedQueue; // queue of incoming (server sent) messages
 
@@ -149,14 +151,6 @@ long findZeroInString(char* string, size_t len);
 int isEndingCharacter(char input);
 
 /**
- * @brief Prints ByteBlock to stdout
- * 
- * @param block Block to be printed
- * @param hex If not 0 (false) block will be printed in hexadecimal values
- */
-void printByteBlock(BytesBlock* block, int hex);
-
-/**
  * @brief Replaces bytes in dst with bytes from src up to len lenght
  * 
  * @param dst Destinatin byte array
@@ -165,6 +159,17 @@ void printByteBlock(BytesBlock* block, int hex);
  */
 void stringReplace(char* dst, char* src, size_t len);
 
+#define safePrintStdout(...) \
+    pthread_mutex_lock(progInt->threads->stdoutMutex);  \
+    printf(__VA_ARGS__);                                \
+    fflush(stdout);                                     \
+    pthread_mutex_unlock(progInt->threads->stdoutMutex);\
 
 
+#ifdef DEBUG
+    #define debugPrint(...) fprintf(__VA_ARGS__);
+#else
+    #define debugPrint(...) ;;
 #endif
+
+#endif /*UTILS_H*/

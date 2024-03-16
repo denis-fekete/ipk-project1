@@ -118,7 +118,8 @@ void* protocolReceiver(void *vargp)
         // if in fsm_AUTH state and incoming msg is not REPLY do nothing
         if(*fsmState == fsm_START && msgType != msg_REPLY && msgType != msg_CONF)
         {
-            printf("DEBUG: thrown away, msg type %i, fsm state %i\n", msgType, *fsmState);
+            debugPrint(stdout, "DEBUG: Receiver thrown away a message because"
+                "program is in START state and message is not CONFIRM or REPLY");
             continue;
         }
 
@@ -139,7 +140,7 @@ void* protocolReceiver(void *vargp)
                         queuePopMessageNoMutex(sendingQueue);
                         
                         pthread_cond_signal(progInt->threads->rec2SenderCond);
-                        printf("DEBUG: Confirmed message: %i\n", queueTopMsgID);
+                        debugPrint(stdout, "DEBUG: Confirmed message: %i\n", queueTopMsgID);
                     }
                 }
 
@@ -155,11 +156,9 @@ void* protocolReceiver(void *vargp)
                         // assemble confirm protcol
                         assembleConfirmProtocol(&serverResponse, &sendConfirm, progInt);
                         // add it to queue at start
-                        printf("added new message\n");
                         queueAddMessagePriority(sendingQueue, &sendConfirm, msg_flag_DO_NOT_RESEND);
                         // ping / signal sender
                         pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
-                        printf("pinged sender\n");
                         // set state to OPEN TODO: what if confirm failed?
                         *fsmState = fsm_OPEN;
                     }
@@ -172,15 +171,13 @@ void* protocolReceiver(void *vargp)
             default: break;
         }
 
-        #ifdef DEBUG
-            printf("Received protocol, type: (%i), bytes(%i), contents:\n", msgType, bytesRx); //DEBUG:
-            bufferPrint(&serverResponse, 0, 1); //DEBUG:
-        #endif
+        debugPrint(stdout, "DEBUG:Received protocol, type: (%i), bytes(%i), contents:\n", msgType, bytesRx);
+        bufferPrint(&serverResponse, true); // DEBUG:
     }
     LOOP_WITH_EPOLL_END
 
     free(serverResponse.data);
-    printf("Receiver ended\n");
+    debugPrint(stdout, "DEBUG: Receiver ended\n");
 
     return NULL;
 }
