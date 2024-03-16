@@ -278,8 +278,6 @@ int main(int argc, char* argv[])
             comDetails.msgCounter += 1;
         }
         
-        //TODO: check if necessary
-
         // Exit loop if /exit detected 
         if(cmdType == CMD_EXIT)
         {
