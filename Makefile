@@ -4,8 +4,8 @@ OBJ_DIR = $(BUILD_DIR)/objects
 TARGET = program
 LIB_DIR = $(SRC_DIR)/libs
 
-CC = g++
-CVERSTION = -std=c++20
+CC = gcc
+CVERSTION = -std=c17
 LDFLAGS := -lm -lpcap -lnet
 
 CFLAGS = $(CVERSTION) -pthread -pedantic-errors -Wall -Wextra -Werror -g -DDEBUG -I$(LIB_DIR)
