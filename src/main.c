@@ -13,7 +13,6 @@
 // #include "netinet/ip_icmp.h"
 
 #include "getopt.h" // argument processing
-#include "pthread.h"
 
 #include "libs/customtypes.h"
 #include "libs/buffer.h"
@@ -22,26 +21,16 @@
 #include "libs/ipk24protocol.h"
 #include "libs/msgQueue.h"
 
-#include "unistd.h"
-
 #include "protocolReceiver.h"
 #include "protocolSender.h"
-
-// Global variable shared between files to signalize whenever loops should continue
-bool continueProgram = true;
-MessageQueue* sendingQueue; // queue of outcoming (user sent) messages
-MessageQueue* receivedQueue; // queue of incoming (server sent) messages
-NetworkConfig config; // store network configuration / settings 
-pthread_cond_t main2SenderCond = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t main2SenderMutex = PTHREAD_MUTEX_INITIALIZER;
-
-pthread_cond_t rec2SenderCond = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t rec2SenderMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
 
+/**
+ * @brief Prints help menu when user inputs /help command 
+ */
 void printHelpMenu()
 {
     printf("TODO: print menu\n");
@@ -67,8 +56,8 @@ void processArguments(int argc, char* argv[], enum Protocols* prot, Buffer* ipAd
             exit(EXIT_SUCCESS);
             break;
         case 't':
-            if(strcmp(optarg, "udp") == 0) { *prot = UDP; }
-            else if(strcmp(optarg, "tcp") == 0) { *prot = TCP; }
+            if(strcmp(optarg, "udp") == 0) { *prot = prot_UDP; }
+            else if(strcmp(optarg, "tcp") == 0) { *prot = prot_TCP; }
             else
             {
                 // TODO: change err code
@@ -116,7 +105,7 @@ void storeInformation(cmd_t cmdType, BytesBlock commands[4], CommunicationDetail
 {
     switch (cmdType)
     {
-    case AUTH:
+    case cmd_AUTH:
         // commands: CMD, USERNAME, SECRET, DISPLAYNAME
         bufferResize(&(comDetails->displayName), commands[3].len + 1);
 
@@ -124,14 +113,14 @@ void storeInformation(cmd_t cmdType, BytesBlock commands[4], CommunicationDetail
         comDetails->displayName.data[commands[3].len] = '\0';
         comDetails->displayName.used = commands[3].len;
         break;
-    case JOIN:
+    case cmd_JOIN:
         // commands: CMD, CHANNELID
         bufferResize(&(comDetails->channelID), commands[1].len + 1);
 
         stringReplace(comDetails->channelID.data, commands[1].start, commands[1].len);
         comDetails->channelID.used = commands[1].len;
         break;
-    case RENAME:
+    case cmd_RENAME:
         // commands: CMD, DISPLAYNAME
         bufferResize(&(comDetails->displayName), commands[1].len + 1);
         stringReplace(comDetails->displayName.data, commands[1].start, commands[1].len);
@@ -153,18 +142,42 @@ void storeInformation(cmd_t cmdType, BytesBlock commands[4], CommunicationDetail
 int main(int argc, char* argv[])
 {
     // ------------------------------------------------------------------------
-    //
+    // Initialize interface for program
     // ------------------------------------------------------------------------
 
-    continueProgram = true;
+    ProgramInterface progInt;
 
-    sendingQueue = (MessageQueue*) malloc(sizeof(MessageQueue));
-    if(sendingQueue == NULL) {errHandling("Failed malloc for sendingQueue", 1); /*TODO:*/};
-    receivedQueue = (MessageQueue*) malloc(sizeof(MessageQueue));
-    if(receivedQueue == NULL) {errHandling("Failed malloc for receivedQueue", 1); /*TODO:*/};
+    ThreadCommunication threads;
+    progInt.threads = &threads; 
 
-    queueInit(sendingQueue); // queue of outcoming (user sent) messages
-    queueInit(receivedQueue); // queue of incoming (server sent) messages
+    progInt.threads->continueProgram = true;
+    progInt.threads->fsmState = fsm_START;
+
+    MessageQueue sendingQueue;
+    MessageQueue receivedQueue;
+    queueInit(&sendingQueue); // queue of outcoming (user sent) messages
+    queueInit(&receivedQueue); // queue of incoming (server sent) messages
+
+    progInt.threads->sendingQueue = &sendingQueue;
+    progInt.threads->sendingQueue = &receivedQueue;
+    
+    pthread_cond_t senderEmptyQueueCond = PTHREAD_COND_INITIALIZER;
+    pthread_mutex_t senderEmptyQueueMutex = PTHREAD_MUTEX_INITIALIZER;
+
+    pthread_cond_t rec2SenderCond = PTHREAD_COND_INITIALIZER;
+    pthread_mutex_t rec2SenderMutex = PTHREAD_MUTEX_INITIALIZER;
+
+    progInt.threads->senderEmptyQueueCond = &senderEmptyQueueCond;
+    progInt.threads->senderEmptyQueueMutex = &senderEmptyQueueMutex;
+
+    progInt.threads->rec2SenderCond = &rec2SenderCond;
+    progInt.threads->rec2SenderMutex = &rec2SenderMutex;
+
+    NetworkConfig netConfig;
+    progInt.netConfig = &netConfig;
+
+    CommunicationDetails comDetails;
+    progInt.comDetails = &comDetails;
 
     // ------------------------------------------------------------------------
     // Process arguments from user
@@ -178,13 +191,13 @@ int main(int argc, char* argv[])
     Buffer clientCommands; // 
     bufferInit(&clientCommands);
 
-    DEFAULT_NETWORK_CONFIG(config);
+    DEFAULT_NETWORK_CONFIG(progInt.netConfig);
 
-    processArguments(argc, argv, &(config.protocol), &clientCommands, 
-                    &(config.portNumber), &(config.udpTimeout), 
-                    &(config.udpMaxRetries));
+    processArguments(argc, argv, &(progInt.netConfig->protocol), &clientCommands, 
+                    &(progInt.netConfig->portNumber), &(progInt.netConfig->udpTimeout), 
+                    &(progInt.netConfig->udpMaxRetries));
     
-    if(config.protocol == ERR)
+    if(progInt.netConfig->protocol == prot_ERR)
     { 
         errHandling("Argument protocol (-t udp / tcp) is mandatory!", 1); /*TODO:*/
     }
@@ -196,18 +209,18 @@ int main(int argc, char* argv[])
     // ------------------------------------------------------------------------
 
     // open socket for comunication on client side (this)
-    config.openedSocket = getSocket(config.protocol);
+    progInt.netConfig->openedSocket = getSocket(progInt.netConfig->protocol);
 
     #ifdef DEBUG
         char* serverHostname = (clientCommands.data != NULL)? clientCommands.data : defaultHostname;
-        struct sockaddr_in address = findServer(serverHostname, config.portNumber);
+        struct sockaddr_in address = findServer(serverHostname, progInt.netConfig->portNumber);
     #else
-        struct sockaddr_in address = findServer(clientCommands.data, config.portNumber);
+        struct sockaddr_in address = findServer(clientCommands.data, progInt.netConfig->portNumber);
     #endif
 
     // get server address
-    config.serverAddress = (struct sockaddr*) &address;
-    config.serverAddressSize = sizeof(address);
+    progInt.netConfig->serverAddress = (struct sockaddr*) &address;
+    progInt.netConfig->serverAddressSize = sizeof(address);
 
     // ------------------------------------------------------------------------
     // Declaring and initializing variables need for communication
@@ -220,11 +233,10 @@ int main(int argc, char* argv[])
 
     // Buffer clientCommands; bufferInit(&clientCommands); // Moved up for reusability
     
-    CommunicationDetails comDetails;
-    comDetails.msgCounter = 0;
+    progInt.comDetails->msgCounter = 0;
 
-    bufferInit(&(comDetails.displayName));
-    bufferInit(&(comDetails.channelID));
+    bufferInit(&(progInt.comDetails->displayName));
+    bufferInit(&(progInt.comDetails->channelID));
 
     BytesBlock commands[4];
 
@@ -232,19 +244,18 @@ int main(int argc, char* argv[])
     // Setup second thread that will handle data receiving
     // ------------------------------------------------------------------------
 
-    config.comDetails = &comDetails;
-
     pthread_t protReceiver;
-    pthread_create(&protReceiver, NULL, protocolReceiver, &config);
+    pthread_create(&protReceiver, NULL, protocolReceiver, &progInt);
 
     pthread_t protSender;
-    pthread_create(&protSender, NULL, protocolSender, &config);
+    pthread_create(&protSender, NULL, protocolSender, &progInt);
 
     // ------------------------------------------------------------------------
     // Loop of communication
     // ------------------------------------------------------------------------
+
     // continue while continueProgram is true, only main id can go into this loop
-    while (continueProgram)
+    while (progInt.threads->continueProgram)
     {
         // --------------------------------------------------------------------
         // Convert user input into an protocol
@@ -257,8 +268,18 @@ int main(int argc, char* argv[])
         // store recognized command
         cmdType = userInputToCmds(&clientCommands, commands, &eofDetected);
 
+        // if buffer is empty ... newline was entered
+        if(cmdType == cmd_NONE) { continue; }
 
-        if(cmdType == NONE) { continue; }
+        // if user is in start state and provided command is not auth,
+        // throw away message print warning
+        if(progInt.threads->fsmState == fsm_START && cmdType != cmd_AUTH)
+        {
+            printf("System: You are not connected to server! "
+                "Use /auth to connect to server or /help for more information.\n"); 
+            continue;
+        }
+
         // store commands into comDetails for future use in other commands
         storeInformation(cmdType, commands, &comDetails);
         // Assembles array of bytes into Buffer protocolMsg, returns if 
@@ -269,22 +290,22 @@ int main(int argc, char* argv[])
         {
             // if sendingQueue is empty, sender is asleep waiting
             // wake him up
-            if(queueIsEmpty(sendingQueue))
+            if(queueIsEmpty(progInt.threads->sendingQueue))
             {
-                pthread_cond_signal(&main2SenderCond);
+                pthread_cond_signal(&senderEmptyQueueCond);
             }
             // add message to the queue
-            queueAddMessage(sendingQueue, &protocolMsg);
+            queueAddMessage(progInt.threads->sendingQueue, &protocolMsg, msg_flag_NONE);
             comDetails.msgCounter += 1;
         }
         
         // Exit loop if /exit detected 
-        if(cmdType == CMD_EXIT)
+        if(cmdType == cmd_EXIT)
         {
             sleep(2);
             // wake up sender to exit
-            pthread_cond_signal(&main2SenderCond);
-            continueProgram = false;
+            pthread_cond_signal(&senderEmptyQueueCond);
+            progInt.threads->continueProgram = false;
         }
     }
 
@@ -298,17 +319,13 @@ int main(int argc, char* argv[])
     pthread_join(protReceiver, NULL);
     pthread_join(protSender, NULL);
 
-    shutdown(config.openedSocket, SHUT_RDWR);
+    shutdown(progInt.netConfig->openedSocket, SHUT_RDWR);
     free(comDetails.displayName.data);
     free(comDetails.channelID.data);
     free(clientCommands.data);
     free(protocolMsg.data);
-    queueDestroy(sendingQueue);
-    queueDestroy(receivedQueue);
-    free(sendingQueue);
-    free(receivedQueue);
+    queueDestroy(progInt.threads->sendingQueue);
+    queueDestroy(progInt.threads->receivedQueue);
 
-    // pthread_mutex_destroy(&main2SenderMutex);
-    // pthread_mutex_destroy(&rec2SenderMutex);
     return 0;
 }

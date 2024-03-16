@@ -11,19 +11,21 @@
 #ifndef MSG_LISH_H
 #define MSG_LISH_H
 
-#include "customtypes.h"
-#include "pthread.h"
 #include "buffer.h"
+#include "utils.h"
+#include "pthread.h"
 
 // ----------------------------------------------------------------------------
 // Defines, typedefs and structures
 // ----------------------------------------------------------------------------
 
+typedef enum MessageFlags {msg_flag_NONE, msg_flag_DO_NOT_RESEND} msg_flags;
+
 typedef struct Message {
     Buffer* buffer;
     struct Message* behindMe;
-    bool confirmed;
     u_int8_t sendCount;
+    msg_flags msgFlags;
 } Message;
 
 typedef struct MessageQueue {
@@ -62,10 +64,18 @@ Buffer* queueGetMessage(MessageQueue* queue);
 /**
  * @brief Adds new message to the queue at the end
  * 
- * @param queue 
+ * @param queue MessageQueue to which will the new message be added
  * @param buffer is and input buffer from which the new message will be created
  */
-void queueAddMessage(MessageQueue* queue, Buffer* buffer);
+void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags);
+
+/**
+ * @brief Adds new message to the queue at the start
+ * 
+ * @param queue MessageQueue to which will the new message be added
+ * @param buffer is and input buffer from which the new message will be created
+ */
+void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags);
 
 /**
  * @brief Deletes first message and moves queue forward
@@ -90,7 +100,6 @@ bool queueIsEmpty(MessageQueue* queue);
  * @return size_t Number of Messages in queue
  */
 size_t queueLength(MessageQueue* queue);
-
 
 /**
  * @brief Adds ONE to sended counter of first message 
@@ -144,5 +153,13 @@ void queueUnlock(MessageQueue* queue);
  * @param queue Queue from which will be the message deleted
  */
 void queuePopMessageNoMutex(MessageQueue* queue);
+
+/**
+ * @brief Returns value of first message flags
+ * 
+ * @param queue Queue from which the first message's flags will be returned 
+ * @return msg_flags flags to be returned
+ */
+msg_flags queueGetMessageFlags(MessageQueue* queue);
 
 #endif

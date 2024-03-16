@@ -15,12 +15,12 @@
 #include "utils.h"
 
 /**
- * @brief Assembles 
+ * @brief Assembles protocol from commands and command type into a buffer
  * 
  * @param type Recognized type of command user provided
  * @param commands Separated commands from user input
  * @param buffer Output buffer to be trasmited to the server
- * @param comDetails CommunicationDetails need by some commands like JOIN 
+ * @param comDetails CommunicationDetails need by some commands like cmd_JOIN 
  * that don't have all informations provided by user at start
  * 
  * @return Returns true if buffer can be trasmitted to the server

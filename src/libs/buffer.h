@@ -13,20 +13,22 @@
 #include "stdlib.h"
 #include "stdio.h"
 
-#include "utils.h"
-#include "customtypes.h"
-
 
 #define INITIAL_BUFFER_SIZE 256
 
-/* MOVED TO CUSTOMTYPES.H
+/**
+ * @brief Buffer is an structure for defining byte arrays (char arrays / string)
+ * with information about how many bytes has been allocated and how many 
+ * has been used.
+ */
 typedef struct Buffer
 {
     char* data;
     size_t allocated ;
     size_t used;
 } Buffer;
-*/
+
+#include "utils.h"
 
 /**
  * @brief Sets default values to the buffer

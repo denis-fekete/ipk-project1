@@ -18,8 +18,8 @@ int getSocket(enum Protocols protocol)
     int family;
     switch (protocol)
     {
-        case UDP: family = SOCK_DGRAM; break; 
-        case TCP: family = SOCK_STREAM; break;
+        case prot_UDP: family = SOCK_DGRAM; break; 
+        case prot_TCP: family = SOCK_STREAM; break;
         default: errHandling("Unknown protocol passed to function get socket", -1); 
     }
 

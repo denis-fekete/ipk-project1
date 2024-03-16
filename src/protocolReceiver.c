@@ -8,21 +8,35 @@
  */
 
 #include "protocolReceiver.h"
-#include "time.h"
+#include "sys/time.h"
 
-extern bool continueProgram;
-extern NetworkConfig config;
-extern MessageQueue* receivedQueue;
-extern MessageQueue* sendingQueue;
+void assembleConfirmProtocol(Buffer* recvBuffer, Buffer* confirmBuffer, ProgramInterface* progInt)
+{
+    if(recvBuffer == NULL || confirmBuffer == NULL)
+    {
+         errHandling("Invalid pointers passed as arguements for assembleConfirmProtocol()\n", 1); // TODO:
+    }
 
-extern pthread_cond_t rec2SenderCond;
-extern pthread_mutex_t rec2SenderMutex;
+    BytesBlock commands[4];
+    // set commands values to received message id
+    commands[0].start = &(recvBuffer->data[1]);
+    commands[0].len = 1;
+    commands[1].start = &(recvBuffer->data[2]);
+    commands[1].len = 1;
 
+    commands[2].start = NULL; commands[2].len = 0;
+    commands[3].start = NULL; commands[3].len = 0;
 
+    bool res = assembleProtocol(cmd_CONF, commands, confirmBuffer, progInt->comDetails);
+    if(!res)
+    {
+        errHandling("Assembling of confrim protocol failed\n", 1); // TODO:
+    }
+}
 // use macro for loop overhead because it would be too much tabulators
 #define LOOP_WITH_EPOLL_START \
     do { \
-        epoll_ctl(epollFd, EPOLL_CTL_ADD, config->openedSocket, &event);    \
+        epoll_ctl(epollFd, EPOLL_CTL_ADD, progInt->netConfig->openedSocket, &event);    \
         int readySockets = epoll_wait(epollFd, events, MAX_EVENTS, 1);      \
         if(readySockets){ } /*TODO: delete*/                                \
         for(unsigned i = 0; i < MAX_EVENTS; i++) {                          \
@@ -31,7 +45,7 @@ extern pthread_mutex_t rec2SenderMutex;
 #define LOOP_WITH_EPOLL_END \
             } \
         } \
-    } while (continueProgram);
+    } while (progInt->threads->continueProgram);
 
 
 /**
@@ -40,19 +54,23 @@ extern pthread_mutex_t rec2SenderMutex;
  * @param vargp 
  * @return void* 
  */
-
 void* protocolReceiver(void *vargp)
 {
     // ------------------------------------------------------------------------
     // Set up variables for receiving messages
     // ------------------------------------------------------------------------
-    NetworkConfig* config = (NetworkConfig*) vargp;
+    ProgramInterface* progInt = (ProgramInterface*) vargp;
+    MessageQueue* sendingQueue = progInt->threads->sendingQueue;
+    fsm_t* fsmState = &(progInt->threads->fsmState);
 
     BytesBlock commands[4]; // array of commands 
 
     Buffer serverResponse;
     bufferInit(&serverResponse);
     bufferResize(&serverResponse, 1500); // set max size messages from server
+    Buffer sendConfirm;
+    bufferInit(&sendConfirm);
+    bufferResize(&sendConfirm, 5); // set confirm uses max 3 bytes
 
     // Await response
     int flags = 0; // TODO: look if some flags could be used
@@ -68,12 +86,12 @@ void* protocolReceiver(void *vargp)
     struct epoll_event events[MAX_EVENTS];
     int epollFd = epoll_create1(0);
     event.events = EPOLLIN; //want to read
-    event.data.fd = config->openedSocket;
+    event.data.fd = progInt->netConfig->openedSocket;
 
     struct timeval tv;
     tv.tv_sec = 1;
-    // tv.tv_usec = 500000; /*set timeout for recvfrom to 500ms*/
-    if(setsockopt(config->openedSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv)))
+
+    if(setsockopt(progInt->netConfig->openedSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv)))
     {
         errHandling("setsockopt() failed\n", 1); //TODO:
     }
@@ -84,9 +102,10 @@ void* protocolReceiver(void *vargp)
 
     LOOP_WITH_EPOLL_START
     {
-        int bytesRx = recvfrom(config->openedSocket, serverResponse.data,
+        int bytesRx = recvfrom(progInt->netConfig->openedSocket, serverResponse.data,
                                 serverResponse.allocated, flags, 
-                                config->serverAddress, &(config->serverAddressSize));
+                                progInt->netConfig->serverAddress, 
+                                &(progInt->netConfig->serverAddressSize));
         
         if(bytesRx <= 0) {continue;}
         
@@ -95,9 +114,18 @@ void* protocolReceiver(void *vargp)
         disassebleProtocol(&serverResponse, commands, &msgType, &msgID);
         
         Buffer* topOfQueue = NULL;
+
+        // if in fsm_AUTH state and incoming msg is not REPLY do nothing
+        if(*fsmState == fsm_START && msgType != msg_REPLY && msgType != msg_CONF)
+        {
+            printf("DEBUG: thrown away, msg type %i, fsm state %i\n", msgType, *fsmState);
+            continue;
+        }
+
+        char replyResult;
         switch(msgType)
         {
-            case MSG_CONF:
+            case msg_CONF:
                 // get pointer to the first queue
                 topOfQueue = queueGetMessageNoUnlock(sendingQueue);
 
@@ -110,21 +138,42 @@ void* protocolReceiver(void *vargp)
                     {
                         queuePopMessageNoMutex(sendingQueue);
                         
-                        pthread_cond_signal(&rec2SenderCond);
+                        pthread_cond_signal(progInt->threads->rec2SenderCond);
                         printf("DEBUG: Confirmed message: %i\n", queueTopMsgID);
                     }
                 }
 
                 queueUnlock(sendingQueue);
                 break;
-            case MSG_BYE:
-                continueProgram = false;
+            case msg_REPLY:;
+                replyResult = serverResponse.data[3];
+
+                if(*fsmState == fsm_START)
+                {
+                    if(replyResult == 1)
+                    {
+                        // assemble confirm protcol
+                        assembleConfirmProtocol(&serverResponse, &sendConfirm, progInt);
+                        // add it to queue at start
+                        printf("added new message\n");
+                        queueAddMessagePriority(sendingQueue, &sendConfirm, msg_flag_DO_NOT_RESEND);
+                        // ping / signal sender
+                        pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
+                        printf("pinged sender\n");
+                        // set state to OPEN TODO: what if confirm failed?
+                        *fsmState = fsm_OPEN;
+                    }
+                    else { /*TODO:*/}
+                }
+                break;
+            case msg_BYE:
+                progInt->threads->continueProgram = false;
                 break;
             default: break;
         }
 
         #ifdef DEBUG
-            printf("Received protocol, type: (%i), contents:\n", msgType); //DEBUG:
+            printf("Received protocol, type: (%i), bytes(%i), contents:\n", msgType, bytesRx); //DEBUG:
             bufferPrint(&serverResponse, 0, 1); //DEBUG:
         #endif
     }

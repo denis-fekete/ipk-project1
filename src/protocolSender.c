@@ -10,14 +10,6 @@
 #include "protocolSender.h"
 #include "sys/time.h"
 
-extern bool continueProgram;
-extern NetworkConfig config;
-extern MessageQueue* sendingQueue;
-extern pthread_cond_t main2SenderCond;
-extern pthread_mutex_t main2SenderMutex;
-extern pthread_cond_t rec2SenderCond;
-extern pthread_mutex_t rec2SenderMutex;
-
 #define TIMEOUT_CALCULATION(millis)                                             \
     gettimeofday(&timeNow, NULL);                                               \
     timeToWait.tv_sec = timeNow.tv_sec + millis / 1000;                         \
@@ -27,8 +19,8 @@ extern pthread_mutex_t rec2SenderMutex;
 
 void* protocolSender(void* vargp)
 {
-    if(vargp) {} // Fool compiler
-
+    ProgramInterface* progInt = (ProgramInterface*) vargp;
+    MessageQueue* sendingQueue = progInt->threads->sendingQueue;
     int flags = 0; //TODO: check if some usefull flags could be done
     if(flags){} // DEBUG:
     
@@ -42,15 +34,15 @@ void* protocolSender(void* vargp)
         {
             // use pthread wait for main thread to ping that queue is not 
             // empty or timeout to expire
-            pthread_cond_wait(&main2SenderCond, &main2SenderMutex);
+            pthread_cond_wait(progInt->threads->senderEmptyQueueCond, progInt->threads->senderEmptyQueueMutex);
             continue;
         }
-
         // check if message was sended more than maxRetries
-        if(queueGetSendedCounter(sendingQueue) > (config.udpMaxRetries))
+
+        if(queueGetSendedCounter(sendingQueue) > (progInt->netConfig->udpMaxRetries))
         {
             queuePopMessage(sendingQueue);//TODO: print some error
-            printf("DEBUG: Message thrown away\n");
+            printf("System: Request timed out. Last message was not sent.\n");
             continue;
         }
 
@@ -59,9 +51,9 @@ void* protocolSender(void* vargp)
         int bytesTx; // number of sended bytes
 
         // send buffer to the server 
-        bytesTx = sendto(config.openedSocket, msgToBeSend->data, 
-                        msgToBeSend->used, flags, config.serverAddress, 
-                        config.serverAddressSize);
+        bytesTx = sendto(progInt->netConfig->openedSocket, msgToBeSend->data, 
+                        msgToBeSend->used, flags, progInt->netConfig->serverAddress, 
+                        progInt->netConfig->serverAddressSize);
 
         if(bytesTx < 0)
         {
@@ -75,14 +67,20 @@ void* protocolSender(void* vargp)
             bufferPrint(msgToBeSend, 0, 1);
         #endif
 
+        // if DO_NOT_RESEND flags is set, delete msg from queue right away
+        if(queueGetMessageFlags(sendingQueue) == msg_flag_DO_NOT_RESEND)
+        {
+            queuePopMessage(sendingQueue);
+        }
+
         // After message has been sended wait udpTimeout time until 
         // attempting to resend it / again
-        TIMEOUT_CALCULATION(config.udpTimeout);
-        pthread_cond_timedwait(&rec2SenderCond, &rec2SenderMutex, &timeToWait);
+        TIMEOUT_CALCULATION(progInt->netConfig->udpTimeout);
+        pthread_cond_timedwait(progInt->threads->rec2SenderCond, progInt->threads->rec2SenderMutex, &timeToWait);
 
 
     // repeat until continueProgram is false and queue is empty
-    } while( continueProgram || !(queueIsEmpty(sendingQueue)) );
+    } while( progInt->threads->continueProgram || !(queueIsEmpty(sendingQueue)) );
 
     printf("Sender ended\n");
     return NULL;

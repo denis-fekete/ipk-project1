@@ -11,23 +11,31 @@
 #define CUSTOM_TYPES_H 1
 
 #include "sys/types.h"
+#include "networkCom.h"
+#include "msgQueue.h"
 
-typedef struct BytesBlock {
-    char* start; // pointer to the starting character of the block
-    size_t len; // length of the block
-} BytesBlock;
+struct Buffer;
+struct BytesBlock;
+struct NetworkConfig;
+struct CommunicationDetails;
+struct ThreadCommunication;
+struct ProgramInterface;
+struct Message;
+struct MessageQueue;
 
-typedef struct Buffer
-{
-    char* data;
-    size_t allocated ;
-    size_t used;
-} Buffer;
 
-typedef struct CommunicationDetails {
-    Buffer displayName;
-    Buffer channelID;
-    u_int16_t msgCounter;
-} CommunicationDetails;
+typedef struct Buffer Buffer; 
+typedef struct BytesBlock BytesBlock;
+typedef struct NetworkConfig NetworkConfig; 
+typedef struct CommunicationDetails CommunicationDetails; 
+typedef struct ThreadCommunication ThreadCommunication;
+typedef struct ProgramInterface ProgramInterface; 
+typedef struct Message Message;
+typedef struct MessageQueue MessageQueue;
+
+typedef enum FSM fsm_t;
+typedef enum CommandType cmd_t;
+typedef enum Protocols prot_t;
+typedef enum MessageType msg_t;
 
 #endif

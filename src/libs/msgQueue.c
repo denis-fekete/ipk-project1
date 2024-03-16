@@ -1,7 +1,7 @@
 /**
  * @file msgQueue.c
  * @author Denis Fekete (xfeket01@vutbr.cz)
- * @brief 
+ * @brief Implemetation of MessageQueue functionality
  * 
  * @copyright Copyright (c) 2024
  * 
@@ -74,8 +74,8 @@ Buffer* queueGetMessage(MessageQueue* queue)
  * @brief Return pointer to the first message but don't unlock queue.
  * 
  * Usage:
- * Buffer* b = queueGetMessageNoUnlock(queue_ptr); 
- * // ... do something with b 
+ * Buffer* b = queueGetMessageNoUnlock(queue_ptr); <br>
+ * /\* ... do something with b ... *\ <br>
  * queueUnlock(queue_ptr);
  * 
  * @warning queueUnlock() must be called after this function.
@@ -97,9 +97,10 @@ Buffer* queueGetMessageNoUnlock(MessageQueue* queue)
  * @brief Unlock queue
  * 
  * Usage:
- * Buffer* b = queueGetMessageNoUnlock(queue_ptr); 
- * // ... do something with b 
+ * Buffer* b = queueGetMessageNoUnlock(queue_ptr); <br>
+ * /\* ... do something with b ... *\ <br>
  * queueUnlock(queue_ptr);
+ * 
  * 
  * @warning DO NOT USE! if you haven't read documentation.
  * 
@@ -110,39 +111,39 @@ void queueUnlock(MessageQueue* queue)
     THREAD_UNLOCK;
 }
 
+#define ALLOCATE_AND_COPY_MSG_AND_BUFFER \
+    Message* tmp_msg = (Message*) malloc(sizeof(Message));  \
+                                                            \
+    if(tmp_msg == NULL)                                     \
+    {                                                       \
+        errHandling("Malloc failed in queueAddMessage() for Message", 1); /* TODO: change err code */ \
+    }                                                       \
+                                                            \
+    Buffer* tmp_buffer = (Buffer*) malloc(sizeof(Buffer));  \
+    if(tmp_msg == NULL)                                     \
+    {                                                       \
+        errHandling("Malloc failed in queueAddMessage() for Buffer", 1); /* TODO: change err code */ \
+    }                                                       \
+    /* set default values to the message attributes*/       \
+    bufferInit(tmp_buffer);                                 \
+    tmp_msg->sendCount = 0;                                 \
+                                                            \
+    /* Copies input buffer to the new message*/             \
+    bufferCopy(tmp_buffer, buffer);                         \
+                                                            \
+    tmp_msg->buffer = tmp_buffer;                           \
+    tmp_msg->msgFlags = msgFlags;                          
+
 /**
  * @brief Adds new message to the queue at the end
  * 
- * @param queue 
+ * @param queue MessageQueue to which will the new message be added
  * @param buffer is and input buffer from which the new message will be created
  */
-void queueAddMessage(MessageQueue* queue, Buffer* buffer)
+void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags)
 {
 
-    Message* tmp_msg = (Message*) malloc(sizeof(Message));
-
-    if(tmp_msg == NULL)
-    {
-        THREAD_UNLOCK;
-        errHandling("Malloc failed in queueAddMessage() for Message", 1); // TODO: change err code
-    }
-
-    Buffer* tmp_buffer = (Buffer*) malloc(sizeof(Buffer));
-    if(tmp_msg == NULL)
-    {
-        THREAD_UNLOCK;
-        errHandling("Malloc failed in queueAddMessage() for Buffer", 1); // TODO: change err code
-    }
-
-    // set default values to the message attributes
-    bufferInit(tmp_buffer);
-    tmp_msg->sendCount = 0;
-
-    // Copies input buffer to the new message
-    bufferCopy(tmp_buffer, buffer);
-
-    tmp_msg->buffer = tmp_buffer;
-
+    ALLOCATE_AND_COPY_MSG_AND_BUFFER;
 
     THREAD_LOCK;
     // if queue doesn't have first, set this msg as first
@@ -155,6 +156,33 @@ void queueAddMessage(MessageQueue* queue, Buffer* buffer)
 
     // set new message's behindMe value to NULL
     queue->last->behindMe = NULL;
+    // increase queue size
+    queue->len += 1;
+
+    THREAD_UNLOCK;
+}
+
+/**
+ * @brief Adds new message to the queue at the start
+ * 
+ * @param queue MessageQueue to which will the new message be added
+ * @param buffer is and input buffer from which the new message will be created
+ */
+void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags)
+{
+    ALLOCATE_AND_COPY_MSG_AND_BUFFER;
+
+    THREAD_LOCK;
+    // if queue doesn't have last, set this msg as last
+    if(queue->last == NULL) { queue->last = tmp_msg; }
+
+    Message* oldFirst = queue->first;
+
+    // set new message as first
+    queue->first = tmp_msg;
+
+    tmp_msg->behindMe = oldFirst;
+    
     // increase queue size
     queue->len += 1;
 
@@ -286,6 +314,20 @@ u_int8_t queueGetSendedCounter(MessageQueue* queue)
     return val;
 }
 
+/**
+ * @brief Returns value of first message flags
+ * 
+ * @param queue Queue from which the first message's flags will be returned 
+ * @return msg_flags flags to be returned
+ */
+msg_flags queueGetMessageFlags(MessageQueue* queue)
+{
+    THREAD_LOCK;
+    msg_flags flags = queue->first->msgFlags;
+    THREAD_UNLOCK;
+
+    return flags;
+}
 
 #undef THREAD_LOCK
 #undef THREAD_UNLOCK

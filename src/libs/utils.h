@@ -14,21 +14,79 @@
 #include "stdio.h"
 #include "string.h"
 #include "stdbool.h"
+#include "pthread.h"
+#include "unistd.h"
 
 #include "buffer.h" 
-#include "customtypes.h"
 
-typedef enum CommandType {AUTH, JOIN, RENAME, HELP, PLAIN_MSG, CMD_EXIT, NONE} cmd_t;
-enum Protocols {ERR, UDP, TCP};
+// ----------------------------------------------------------------------------
+//  Enums
+// ----------------------------------------------------------------------------
+
+typedef enum FSM {fsm_START, fsm_AUTH, fsm_OPEN, fsm_ERR, fms_END} fsm_t;
+
+typedef enum CommandType {cmd_AUTH, cmd_JOIN, cmd_RENAME, cmd_HELP, cmd_CONF, cmd_MSG, cmd_EXIT, cmd_NONE} cmd_t;
+
+typedef enum Protocols {prot_ERR=-50, prot_UDP=50, prot_TCP=100} prot_t;
+
 typedef enum MessageType {
-    MSG_CONF = 0x00,
-    MSG_REPLY = 0x01,
-    MSG_AUTH = 0x02,
-    MSG_JOIN = 0x03,
-    MSG_MSG = 0x04,
-    MSG_ERR = 0xFE,
-    MSG_BYE = 0xFF
+    msg_CONF = 0x00,
+    msg_REPLY = 0x01,
+    msg_AUTH = 0x02,
+    msg_JOIN = 0x03,
+    msg_MSG = 0x04,
+    msg_ERR = 0xFE,
+    msg_BYE = 0xFF
   } msg_t;
+
+#include "customtypes.h"
+// ----------------------------------------------------------------------------
+//  Structures
+// ----------------------------------------------------------------------------
+
+/**
+ * @brief Points at the start of the bytes block (array) with len length.
+ * 
+ * @note Byte block in this context does not own the memory, it is just a 
+ * pointer with length
+ * 
+ */
+typedef struct BytesBlock {
+    char* start; // pointer to the starting character of the block
+    size_t len; // length of the block
+} BytesBlock;
+
+
+typedef struct CommunicationDetails {
+    Buffer displayName;
+    Buffer channelID;
+    u_int16_t msgCounter;
+} CommunicationDetails;
+
+
+typedef struct ThreadCommunication {
+    // true = work as normal, false = prepare to end
+    bool continueProgram; // variable to signal that program should prepare for finishing
+    fsm_t fsmState; // state of FSM, how should program behave 
+
+    struct MessageQueue* sendingQueue; // queue of outcoming (user sent) messages
+    struct MessageQueue* receivedQueue; // queue of incoming (server sent) messages
+
+    pthread_cond_t* senderEmptyQueueCond;// signaling sender thread from main thread
+    pthread_mutex_t* senderEmptyQueueMutex;// signaling sender thread from main thread
+
+    pthread_cond_t* rec2SenderCond; // signaling sender thread from receiver thread
+    pthread_mutex_t* rec2SenderMutex; // signaling sender thread from receiver thread
+} ThreadCommunication;
+
+typedef struct ProgramInterface {
+    CommunicationDetails* comDetails;
+    struct NetworkConfig* netConfig;
+    ThreadCommunication* threads;
+} ProgramInterface;
+// ----------------------------------------------------------------------------
+//  Functions
+// ----------------------------------------------------------------------------
 
 /**
  * @brief Print error message to stderr and exit program with errorCode

@@ -14,17 +14,14 @@
 #include "sys/socket.h"
 #include "netdb.h"
 
-
 #include "utils.h"
 
-
 typedef struct NetworkConfig {
-    enum Protocols protocol;
+    prot_t protocol;
     uint16_t portNumber;
     uint16_t udpTimeout;
     uint8_t udpMaxRetries;
     int openedSocket;
-    CommunicationDetails* comDetails;
     struct sockaddr* serverAddress;
     unsigned serverAddressSize;
 } NetworkConfig;
@@ -32,21 +29,20 @@ typedef struct NetworkConfig {
 #define PORT_NUMBER 4567
 
 #define DEFAULT_NETWORK_CONFIG(config)  \
-    config.protocol = ERR;              \
-    config.portNumber = PORT_NUMBER;    \
-    config.udpTimeout = 250;            \
-    config.udpMaxRetries = 3;           \
-    config.openedSocket = -1;           \
-    config.comDetails = NULL;           \
-    config.serverAddress = NULL;         \
-    config.serverAddressSize = 0;
+    config->protocol = prot_ERR;         \
+    config->portNumber = PORT_NUMBER;    \
+    config->udpTimeout = 250;            \
+    config->udpMaxRetries = 3;           \
+    config->openedSocket = -1;           \
+    config->serverAddress = NULL;        \
+    config->serverAddressSize = 0;
 /**
  * @brief Get the Socket id
  * 
  * @param protocol Protocol that will be used to open socket (UDP or TCP) 
  * @return int Socket id
  */
-int getSocket(enum Protocols protocol);
+int getSocket(prot_t protocol);
 
 /**
  * @brief Finds server and returns it socket adress
