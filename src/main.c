@@ -28,12 +28,41 @@
 //
 // ----------------------------------------------------------------------------
 
+//This allows for change of executable name in Makefile using -D{EXECUTABLE_NAME}
+#ifndef EXECUTABLE_NAME
+#define EXECUTABLE_NAME "ipk24-chat"
+#endif
+
 /**
  * @brief Prints help menu when user inputs /help command 
  */
 void printCliHelpMenu()
 {
-    debugPrint(stdout, "TBD:\n");
+    printf(
+        "Usage: %s [OPTION] [ARGUMENT] ...\n"
+        "Starts client for communication with server at provided address "
+        "(through -s OPTION) using IPK24-CHAT Protocol based on TCP or "
+        "UDP (based on -t OPTION)\n"
+        "\n"
+        "Mandatory options:\n"
+        "\t-s\t- "
+        "Sets server IP address (can be in \"www.server.com\" format) "
+        "to which client will try to connect\n"
+        "\t-t\t- "
+        "Sets between UDP or TCP protocol to be used for sending messages to server\n"
+        "\nNon-mandatory options:\n"
+        "\t-p\t- "
+        "Specifies which port will client try to connect to at specified "
+        "IP adress. Default value is 4567.\n"
+        "\t-d\t- "
+        "Sets UDP confirmation timeout in milliseconds\n"
+        "\t-r\t- "
+        "Sets maximum number of UDP retransmissions\n"
+        "\t-h\t- "
+        "Prints this help menu end exits program with code 0\n"
+
+        , EXECUTABLE_NAME
+    );
 }
 
 void printUserHelpMenu(ProgramInterface* progInt)

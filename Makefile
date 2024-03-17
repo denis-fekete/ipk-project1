@@ -1,7 +1,7 @@
 SRC_DIR = src
 BUILD_DIR = build
 OBJ_DIR = $(BUILD_DIR)/objects
-TARGET = program
+TARGET = ipk24-chat
 LIB_DIR = $(SRC_DIR)/libs
 
 CC = gcc
