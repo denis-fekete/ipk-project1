@@ -176,10 +176,10 @@ int main(int argc, char* argv[])
     progInt->threads->rec2SenderMutex = &rec2SenderMutex;
 
     NetworkConfig netConfig;
-    progInt->netConfig = &netConfig;
+    progInterface.netConfig = &netConfig;
 
     CommunicationDetails comDetails;
-    progInt->comDetails = &comDetails;
+    progInterface.comDetails = &comDetails;
 
     // ------------------------------------------------------------------------
     // Process arguments from user
@@ -211,8 +211,8 @@ int main(int argc, char* argv[])
     // ------------------------------------------------------------------------
 
     // open socket for comunication on client side (this)
-    progInt->netConfig->openedSocket = getSocket(progInt->netConfig->protocol);
-
+    progInterface.netConfig->openedSocket = getSocket(progInt->netConfig->protocol);
+    
     #ifdef DEBUG
         char* serverHostname = (clientCommands.data != NULL)? clientCommands.data : defaultHostname;
         struct sockaddr_in address = findServer(serverHostname, progInt->netConfig->portNumber);
@@ -247,10 +247,10 @@ int main(int argc, char* argv[])
     // ------------------------------------------------------------------------
 
     pthread_t protReceiver;
-    pthread_create(&protReceiver, NULL, protocolReceiver, &progInt);
+    pthread_create(&protReceiver, NULL, protocolReceiver, progInt);
 
     pthread_t protSender;
-    pthread_create(&protSender, NULL, protocolSender, &progInt);
+    pthread_create(&protSender, NULL, protocolSender, progInt);
 
     // ------------------------------------------------------------------------
     // Loop of communication
