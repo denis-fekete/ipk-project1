@@ -23,7 +23,15 @@
 //  Enums
 // ----------------------------------------------------------------------------
 
-typedef enum FSM {fsm_START, fsm_AUTH, fsm_OPEN, fsm_ERR, fms_END} fsm_t;
+typedef enum FSM {
+    fsm_START, 
+    fsm_AUTH_W82_BE_SENDED, /*authentication is waiting(W8) to(2) be sended*/
+    fsm_AUTH_SENDED, /*authetication was successfully sended*/
+    fsm_W8_4_REPLY, /*auth has been confirmed, waiting for reply*/
+    fsm_OPEN, /*authetication was confirmed and replied to*/
+    fsm_ERR, 
+    fsm_BYE,
+    fms_END} fsm_t;
 
 typedef enum CommandType {cmd_AUTH, cmd_JOIN, cmd_RENAME, cmd_HELP, cmd_CONF, cmd_MSG, cmd_EXIT, cmd_NONE} cmd_t;
 
@@ -70,6 +78,7 @@ typedef struct ThreadCommunication {
     fsm_t fsmState; // state of FSM, how should program behave 
 
     pthread_mutex_t* stdoutMutex;
+    pthread_mutex_t* fsmMutex;
 
     struct MessageQueue* sendingQueue; // queue of outcoming (user sent) messages
     struct MessageQueue* receivedQueue; // queue of incoming (server sent) messages
@@ -172,6 +181,18 @@ void printCliHelpMenu(const char* executableName);
 void printUserHelpMenu(ProgramInterface* progInt);
 
 /**
+ * @brief Changes program state to new state with thread protecion using mutex
+ * 
+ * @param newState New state to be set
+ */
+void setProgramState(ProgramInterface* progInt, fsm_t newState);
+
+/**
+ * @brief Returns program state with thread protecion using mutex
+ */
+fsm_t getProgramState(ProgramInterface* progInt);
+
+/**
  * @brief Macro for safe printing using "global" stdoutMutex.
  * 
  * Uses fflush after message has been written
@@ -182,11 +203,21 @@ void printUserHelpMenu(ProgramInterface* progInt);
     fflush(stdout);                                     \
     pthread_mutex_unlock(progInt->threads->stdoutMutex);\
 
-
 #ifdef DEBUG
-    #define debugPrint(...) fprintf(__VA_ARGS__);
+    extern pthread_mutex_t debugPrintMutex;
+
+    #define debugPrint(...)                     \
+        pthread_mutex_lock(&debugPrintMutex);   \
+        fprintf(__VA_ARGS__);                   \
+        pthread_mutex_unlock(&debugPrintMutex);
+        
+    #define debugPrintSeparator(fs)                                 \
+        pthread_mutex_lock(&debugPrintMutex);                       \
+        fprintf(fs, "----------------------------------------\n");  \
+        pthread_mutex_unlock(&debugPrintMutex);
 #else
-    #define debugPrint(...) ;;
+    #define debugPrint(...) ;
+    #define debugPrintSeparator(fs) ;
 #endif
 
 #endif /*UTILS_H*/

@@ -33,7 +33,7 @@ void queueInit(MessageQueue* queue)
  */
 void queueDestroy(MessageQueue* queue)
 {
-    while(queue->len != 0)
+    while(queue->len > 0)
     {
         queuePopMessage(queue);
     }
@@ -44,6 +44,10 @@ void queueDestroy(MessageQueue* queue)
 
     pthread_mutex_destroy(&(queue->lock));
 }
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
 
 /**
  * @brief Return pointer to the first message 
@@ -56,51 +60,45 @@ void queueDestroy(MessageQueue* queue)
  * @param queue Queue from which the message will be returned 
  * @return Message* 
  */
-Buffer* queueGetMessage(MessageQueue* queue)
+Message* queueGetMessage(MessageQueue* queue)
 {
     THREAD_LOCK;
+    Message* message = queueGetMessageNoMutex(queue);
+    THREAD_UNLOCK;
+    return message;
+}
+
+/**
+ * @brief Return pointer to the first message 
+ * 
+ * @warning This function doesn't use mutexes and is not reentrant,
+ * so prevention of data corruption is on programmer
+ * 
+ * @warning This function does not quarantee that the pointer won't be 
+ * freed leading undefined behavior or Segmentation Fault. Use 
+ * queueGetMessageNoUnlock() instead ... however incorrect use of this
+ * function may lead to queue ending in locked state.
+ * 
+ * @param queue Queue from which the message will be returned 
+ * @return Message* 
+ */
+Message* queueGetMessageNoMutex(MessageQueue* queue)
+{
     if(queue->len > 0 && queue->first != NULL)
     {
-        THREAD_UNLOCK;
-        return queue->first->buffer;
+        return queue->first;
     }
 
-    THREAD_UNLOCK;
     errHandling("Asking for non-existing message, this is implementation error", 1); // DEBUG: this shouldn't be needed
     return NULL;
 }
 
-/**
- * @brief Return pointer to the first message but don't unlock queue.
- * 
- * Usage:
- * Buffer* b = queueGetMessageNoUnlock(queue_ptr); <br>
- * /\* ... do something with b ... *\ <br>
- * queueUnlock(queue_ptr);
- * 
- * @warning queueUnlock() must be called after this function.
- * @param queue Queue from which the message will be returned 
- * @return Message* 
- */
-Buffer* queueGetMessageNoUnlock(MessageQueue* queue)
-{
-    THREAD_LOCK;
-    if(queue->len > 0 && queue->first != NULL)
-    {
-        return queue->first->buffer;
-    }
-
-    return NULL;
-}
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
 
 /**
- * @brief Unlock queue
- * 
- * Usage:
- * Buffer* b = queueGetMessageNoUnlock(queue_ptr); <br>
- * /\* ... do something with b ... *\ <br>
- * queueUnlock(queue_ptr);
- * 
+ * @brief Unlock queue mutex
  * 
  * @warning DO NOT USE! if you haven't read documentation.
  * 
@@ -109,6 +107,17 @@ Buffer* queueGetMessageNoUnlock(MessageQueue* queue)
 void queueUnlock(MessageQueue* queue)
 {
     THREAD_UNLOCK;
+}
+
+/**
+ * @brief Lock queue mutex
+ * @warning DO NOT USE! if you haven't read documentation.
+ * 
+ * @param queue Queue to be unlocked
+ */
+void queueLock(MessageQueue* queue)
+{
+    THREAD_LOCK;
 }
 
 #define ALLOCATE_AND_COPY_MSG_AND_BUFFER \
@@ -133,6 +142,10 @@ void queueUnlock(MessageQueue* queue)
                                                             \
     tmp_msg->buffer = tmp_buffer;                           \
     tmp_msg->msgFlags = msgFlags;                          
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
 
 /**
  * @brief Adds new message to the queue at the end
@@ -162,6 +175,10 @@ void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags)
     THREAD_UNLOCK;
 }
 
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
 /**
  * @brief Adds new message to the queue at the start
  * 
@@ -190,6 +207,37 @@ void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgF
 }
 
 /**
+ * @brief Adds new message to the queue at the start
+ * 
+ * @warning This function doesn't use mutexes and is not reentrant,
+ * so prevention of data corruption is on programmer
+ * 
+ * @param queue MessageQueue to which will the new message be added
+ * @param buffer is and input buffer from which the new message will be created
+ */
+void queueAddMessagePriorityNoMutex(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags)
+{
+    ALLOCATE_AND_COPY_MSG_AND_BUFFER;
+
+    // if queue doesn't have last, set this msg as last
+    if(queue->last == NULL) { queue->last = tmp_msg; }
+
+    Message* oldFirst = queue->first;
+
+    // set new message as first
+    queue->first = tmp_msg;
+
+    tmp_msg->behindMe = oldFirst;
+    
+    // increase queue size
+    queue->len += 1;
+}
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
+/**
  * @brief Deletes first message and moves queue forward
  * 
  * @param queue Queue from which will be the message deleted
@@ -197,26 +245,7 @@ void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgF
 void queuePopMessage(MessageQueue* queue)
 {
     THREAD_LOCK;
-
-    if(queue->len <= 0)
-    {
-        THREAD_UNLOCK
-        return;
-    }
-
-    // store old first
-    Message* oldFirst = queue->first;
-    // set queue first to message behind old first message
-    queue->first = oldFirst->behindMe;
-
-    // destroy message
-    bufferDestory(oldFirst->buffer); // buffer.data
-    free(oldFirst->buffer); // buffer pointer
-    free(oldFirst); // message pointer
-
-    // decrease size of queue
-    queue->len -= 1;
-
+    queuePopMessageNoMutex(queue);
     THREAD_UNLOCK
 }
 
@@ -248,6 +277,10 @@ void queuePopMessageNoMutex(MessageQueue* queue)
     // decrease size of queue
     queue->len -= 1;
 }
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
 
 /**
  * @brief Check if MessageQueue is empty
@@ -301,6 +334,19 @@ void queueMessageSended(MessageQueue* queue)
 }
 
 /**
+ * @brief Adds ONE to sended counter of first message 
+ * 
+ * @param queue queue to which first message counter will be incremented
+ */
+void queueMessageSendedNoMutex(MessageQueue* queue)
+{
+    queue->first->sendCount += 1;
+}
+
+
+
+
+/**
  * @brief Returns number of times this message was sended 
  * 
  * @param queue queue from which first message will be checked
@@ -309,8 +355,23 @@ void queueMessageSended(MessageQueue* queue)
 u_int8_t queueGetSendedCounter(MessageQueue* queue)
 {
     THREAD_LOCK;
-    u_int8_t val = queue->first->sendCount;
+    u_int8_t val = queueGetSendedCounterNoMutex(queue);
     THREAD_UNLOCK;
+    return val;
+}
+
+/**
+ * @brief Returns number of times this message was sended
+ * 
+ * @warning This function doesn't use mutexes and is not reentrant,
+ * so prevention of data corruption is on programmer
+ * 
+ * @param queue queue from which first message will be checked
+ * @return u_int8_t number of times first message in queue was sended 
+ */
+u_int8_t queueGetSendedCounterNoMutex(MessageQueue* queue)
+{
+    u_int8_t val = queue->first->sendCount;
     return val;
 }
 
@@ -323,10 +384,24 @@ u_int8_t queueGetSendedCounter(MessageQueue* queue)
 msg_flags queueGetMessageFlags(MessageQueue* queue)
 {
     THREAD_LOCK;
-    msg_flags flags = queue->first->msgFlags;
+    msg_flags flags = queueGetMessageFlagsNoMutex(queue);
     THREAD_UNLOCK;
 
     return flags;
+}
+
+/**
+ * @brief Returns value of first message flags
+ * 
+ * @warning This function doesn't use mutexes and is not reentrant,
+ * so prevention of data corruption is on programmer
+ * 
+ * @param queue Queue from which the first message's flags will be returned 
+ * @return msg_flags flags to be returned
+ */
+msg_flags queueGetMessageFlagsNoMutex(MessageQueue* queue)
+{
+    return queue->first->msgFlags;
 }
 
 #undef THREAD_LOCK

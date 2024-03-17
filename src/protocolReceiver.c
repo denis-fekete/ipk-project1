@@ -63,7 +63,6 @@ void* protocolReceiver(void *vargp)
     // ------------------------------------------------------------------------
     ProgramInterface* progInt = (ProgramInterface*) vargp;
     MessageQueue* sendingQueue = progInt->threads->sendingQueue;
-    fsm_t* fsmState = &(progInt->threads->fsmState);
 
     BytesBlock commands[4]; // array of commands 
 
@@ -115,10 +114,10 @@ void* protocolReceiver(void *vargp)
         
         disassebleProtocol(&serverResponse, commands, &msgType, &msgID);
         
-        Buffer* topOfQueue = NULL;
+        Message* topOfQueue = NULL;
 
         // if in fsm_AUTH state and incoming msg is not REPLY do nothing
-        if(*fsmState == fsm_START && msgType != msg_REPLY && msgType != msg_CONF)
+        if(getProgramState(progInt) == fsm_START && msgType != msg_REPLY && msgType != msg_CONF)
         {
             debugPrint(stdout, "DEBUG: Receiver thrown away a message because"
                 "program is in START state and message is not CONFIRM or REPLY");
@@ -130,51 +129,72 @@ void* protocolReceiver(void *vargp)
         {
             case msg_CONF:
                 // get pointer to the first queue
-                topOfQueue = queueGetMessageNoUnlock(sendingQueue);
+                queueLock(sendingQueue);
+                topOfQueue = queueGetMessageNoMutex(sendingQueue);
 
                 // check if top is not empty
                 if(topOfQueue != NULL)
                 {
-                    u_int16_t queueTopMsgID = convert2BytesToUInt(topOfQueue->data);
+                    u_int16_t queueTopMsgID = convert2BytesToUInt(topOfQueue->buffer->data);
                 
                     if(msgID == queueTopMsgID)
                     {
+                        // topOfQueue->confirmed = true;
                         queuePopMessageNoMutex(sendingQueue);
                         
                         pthread_cond_signal(progInt->threads->rec2SenderCond);
-                        debugPrint(stdout, "DEBUG: Confirmed message: %i\n", queueTopMsgID);
+                        debugPrint(stdout, "DEBUG: Msg sended by sender was "
+                            "confirmed, id: %i\n", 
+                            queueTopMsgID);
+
+                        // if auth has been sended, and waiting to be confirmed 
+                        if(getProgramState(progInt) == fsm_AUTH_SENDED)
+                        {
+                            // change stato to confirmed, and wait for reply
+                            setProgramState(progInt, fsm_W8_4_REPLY);
+                        }
                     }
                 }
+
 
                 queueUnlock(sendingQueue);
                 break;
             case msg_REPLY:;
                 replyResult = serverResponse.data[3];
 
-                if(*fsmState == fsm_START)
+                // if waiting for authetication reply
+                if(getProgramState(progInt) == fsm_W8_4_REPLY)
                 {
                     if(replyResult == 1)
                     {
                         // assemble confirm protcol
                         assembleConfirmProtocol(&serverResponse, &sendConfirm, progInt);
+
+                        //check if sender is stuck on empty mutex
                         // add it to queue at start
                         queueAddMessagePriority(sendingQueue, &sendConfirm, msg_flag_DO_NOT_RESEND);
+                        // set state to OPEN
+                        setProgramState(progInt, fsm_OPEN);
+
                         // ping / signal sender
                         pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
-                        // set state to OPEN TODO: what if confirm failed?
-                        *fsmState = fsm_OPEN;
+                        pthread_cond_signal(progInt->threads->rec2SenderCond);
+                        
                     }
                     else { /*TODO:*/}
                 }
                 break;
             case msg_BYE:
-                progInt->threads->continueProgram = false;
+                setProgramState(progInt, fsm_BYE);
                 break;
             default: break;
         }
 
-        debugPrint(stdout, "DEBUG:Received protocol, type: (%i), bytes(%i), contents:\n", msgType, bytesRx);
-        bufferPrint(&serverResponse, true); // DEBUG:
+        #ifdef DEBUG
+            debugPrint(stdout, "DEBUG: Received protocol, type: (%i), bytes(%i), contents:\n", msgType, bytesRx);
+            bufferPrint(&serverResponse, 1); // DEBUG:
+            debugPrintSeparator(stdout);
+        #endif
     }
     LOOP_WITH_EPOLL_END
 

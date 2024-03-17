@@ -24,6 +24,10 @@
 #include "protocolReceiver.h"
 #include "protocolSender.h"
 
+#ifdef DEBUG
+    pthread_mutex_t debugPrintMutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
@@ -64,6 +68,8 @@ void processArguments(int argc, char* argv[], enum Protocols* prot, Buffer* ipAd
             optLen = strlen(optarg);
             bufferResize(ipAddress, optLen);
             stringReplace(ipAddress->data, optarg, optLen);
+            ipAddress->data[optLen] = '\0';
+            ipAddress->used = optLen + 1;
             break;
         case 'p':
             *portNum = (uint16_t)atoi(optarg);
@@ -127,6 +133,46 @@ void storeInformation(cmd_t cmdType, BytesBlock commands[4], CommunicationDetail
     }
 }
 
+typedef enum FilterResult {fres_ERR, fres_SKIP, fres_STORE, fres_SEND} filter_res_t;
+
+filter_res_t filterCommandsByFSM(cmd_t cmdType, ProgramInterface* progInt, BytesBlock commands[4], msg_flags* flags)
+{
+    // if buffer is empty ... newline was entered
+    if(cmdType == cmd_NONE) return fres_SKIP;
+
+    switch (getProgramState(progInt))
+    {
+    case fsm_START:
+        // --------------------------------------------------------------------
+        switch (cmdType)
+        {
+        case cmd_AUTH:
+            storeInformation(cmdType, commands, progInt->comDetails);
+            *flags = msg_flag_AUTH;
+            setProgramState(progInt, fsm_AUTH_W82_BE_SENDED);
+            return fres_SEND;
+        case cmd_HELP:
+            printUserHelpMenu(progInt);
+            return fres_SKIP;
+        case cmd_RENAME:
+            storeInformation(cmdType, commands, progInt->comDetails);
+            return fres_SKIP;
+        default:
+            safePrintStdout("System: You are not connected to server! "
+                "Use /auth to connect to server or /help for more information.\n"); 
+            return fres_SKIP;
+            break;
+        }
+        // --------------------------------------------------------------------
+    default:
+        storeInformation(cmdType, commands, progInt->comDetails);
+        return fres_SEND;
+        break;
+    }
+
+    // should this message be not send?
+    return fres_ERR;
+}
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
@@ -156,18 +202,26 @@ int main(int argc, char* argv[])
     queueInit(&receivedQueue); // queue of incoming (server sent) messages
 
     progInt->threads->sendingQueue = &sendingQueue;
-    progInt->threads->sendingQueue = &receivedQueue;
+    progInt->threads->receivedQueue = &receivedQueue;
     
-    pthread_cond_t senderEmptyQueueCond = PTHREAD_COND_INITIALIZER;
-    pthread_mutex_t senderEmptyQueueMutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_cond_t senderEmptyQueueCond;
+    pthread_cond_init(&senderEmptyQueueCond, NULL);
+    pthread_mutex_t senderEmptyQueueMutex;
+    pthread_mutex_init(&senderEmptyQueueMutex, NULL);
 
-    pthread_cond_t rec2SenderCond = PTHREAD_COND_INITIALIZER;
-    pthread_mutex_t rec2SenderMutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_cond_t rec2SenderCond;
+    pthread_cond_init(&rec2SenderCond, NULL);
+    pthread_mutex_t rec2SenderMutex;
+    pthread_mutex_init(&rec2SenderMutex, NULL);
 
     pthread_mutex_t stdoutMutex;
     pthread_mutex_init(&stdoutMutex, NULL);
 
+    pthread_mutex_t fsmMutex;
+    pthread_mutex_init(&fsmMutex, NULL);
+
     progInt->threads->stdoutMutex = &stdoutMutex;
+    progInt->threads->fsmMutex = &fsmMutex;
 
     progInt->threads->senderEmptyQueueCond = &senderEmptyQueueCond;
     progInt->threads->senderEmptyQueueMutex = &senderEmptyQueueMutex;
@@ -186,8 +240,11 @@ int main(int argc, char* argv[])
     // ------------------------------------------------------------------------
 
     #ifdef DEBUG
-    char defaultHostname[] = "127.0.0.1"; /*"anton5.fit.vutbr.cz"*/
+        char defaultHostname[] = "127.0.0.1"; /*"anton5.fit.vutbr.cz"*/
+    #else
+        char* defaultHostname = NULL;
     #endif
+
     // Use buffer for storing ip address, 
     // then used for storing client input / commanads
     Buffer clientCommands; // 
@@ -217,7 +274,9 @@ int main(int argc, char* argv[])
         char* serverHostname = (clientCommands.data != NULL)? clientCommands.data : defaultHostname;
         struct sockaddr_in address = findServer(serverHostname, progInt->netConfig->portNumber);
     #else
-        struct sockaddr_in address = findServer(clientCommands.data, progInt->netConfig->portNumber);
+        char* serverHostname = (clientCommands.data != NULL)? clientCommands.data : defaultHostname;
+        struct sockaddr_in address = findServer(serverHostname, progInt->netConfig->portNumber);
+        // struct sockaddr_in address = findServer(clientCommands.data, progInt->netConfig->portNumber);
     #endif
 
     // get server address
@@ -270,49 +329,49 @@ int main(int argc, char* argv[])
         // store recognized command
         cmdType = userInputToCmds(&clientCommands, commands, &eofDetected);
 
-        // if buffer is empty ... newline was entered
-        if(cmdType == cmd_NONE) { continue; }
-        else if (cmdType == cmd_HELP)
+        msg_flags flags = msg_flag_MSG;
+        filter_res_t result =  filterCommandsByFSM(cmdType, progInt, commands, &flags);
+        switch (result)
         {
-            printUserHelpMenu(progInt);
-            continue;
-        }
-    
-
-        // if user is in start state and provided command is not auth,
-        // throw away message print warning
-        if(progInt->threads->fsmState == fsm_START && cmdType != cmd_AUTH)
-        {
-            safePrintStdout("System: You are not connected to server! "
-                "Use /auth to connect to server or /help for more information.\n"); 
-            continue;
+        case fres_SKIP: continue; break;
+        case fres_SEND: break;
+        default:
+            break;
         }
 
-        // store commands into comDetails for future use in other commands
-        storeInformation(cmdType, commands, &comDetails);
         // Assembles array of bytes into Buffer protocolMsg, returns if 
         // message can be trasmitted   
         canBeSended = assembleProtocol(cmdType, commands, &protocolMsg, &comDetails, progInt);
 
         if(canBeSended)
         {
+            // // add message to the queue
+            // queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, msg_flag_NONE);
+            // comDetails.msgCounter += 1;
+
             // if sendingQueue is empty, sender is asleep waiting
             // wake him up
             if(queueIsEmpty(progInt->threads->sendingQueue))
             {
                 pthread_cond_signal(&senderEmptyQueueCond);
             }
+            // TODO: swap with above
             // add message to the queue
-            queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, msg_flag_NONE);
+            queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags);
             comDetails.msgCounter += 1;
         }
         
         // Exit loop if /exit detected 
         if(cmdType == cmd_EXIT)
         {
-            sleep(2);
+            // sleep(2);
+            // pthread_cond_signal(&senderEmptyQueueCond);
+            while(!queueIsEmpty(&sendingQueue))
+            {
+                sleep(1);
+                pthread_cond_signal(&senderEmptyQueueCond);
+            }
             // wake up sender to exit
-            pthread_cond_signal(&senderEmptyQueueCond);
             progInt->threads->continueProgram = false;
         }
     }
@@ -333,6 +392,7 @@ int main(int argc, char* argv[])
     queueDestroy(progInt->threads->sendingQueue);
     queueDestroy(progInt->threads->receivedQueue);
     pthread_mutex_destroy(&stdoutMutex);
+    pthread_mutex_destroy(&fsmMutex);
 
     return 0;
 }

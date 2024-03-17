@@ -127,7 +127,7 @@ size_t loadBufferFromStdin(Buffer* buffer, bool* eofDetected)
  * @param smartfilter If not 0 (false) only alphanumeric chacters will be prited
  * as chracaters and other chars will be printed as hex codes
  */
-void bufferPrint(Buffer* buffer, bool useDebugPrint)
+void bufferPrint(Buffer* buffer, int useDebugPrint)
 {
     if(buffer->data == NULL || buffer->used == 0) { return; }
 

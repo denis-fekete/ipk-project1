@@ -8,6 +8,7 @@ CC = gcc
 CVERSTION = -std=c17
 LDFLAGS := -lm -lpcap -lnet
 
+# CFLAGS = $(CVERSTION) -pthread -pedantic-errors -Wall -Wextra -Werror -g -I$(LIB_DIR)
 CFLAGS = $(CVERSTION) -pthread -pedantic-errors -Wall -Wextra -Werror -g -DDEBUG -I$(LIB_DIR)
 
 SRCS := $(wildcard $(SRC_DIR)/*.c)
@@ -27,6 +28,7 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 $(OBJ_DIR)/libs/%.o: $(LIB_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
+
 
 .PHONY: clean doc
 

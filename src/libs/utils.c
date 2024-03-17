@@ -193,3 +193,31 @@ void printUserHelpMenu(ProgramInterface* progInt)
         );
 }
 
+
+/**
+ * @brief Changes program state to new state with thread protecion using mutex
+ * 
+ * @param newState New state to be set
+ */
+void setProgramState(ProgramInterface* progInt, fsm_t newState)
+{
+    debugPrintSeparator(stdout);
+    pthread_mutex_lock(progInt->threads->fsmMutex);
+    debugPrint(stdout, "FSM state changed. Old: %i", progInt->threads->fsmState);
+    progInt->threads->fsmState = newState;
+    pthread_mutex_unlock(progInt->threads->fsmMutex);
+    debugPrint(stdout, ", New: %i\n", newState);
+    debugPrintSeparator(stdout);
+}
+
+/**
+ * @brief Returns program state with thread protecion using mutex
+ */
+fsm_t getProgramState(ProgramInterface* progInt)
+{
+    pthread_mutex_lock(progInt->threads->fsmMutex);
+    fsm_t val =  progInt->threads->fsmState;
+    pthread_mutex_unlock(progInt->threads->fsmMutex);
+
+    return val;
+}

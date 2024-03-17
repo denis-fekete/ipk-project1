@@ -34,6 +34,11 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
 
     size_t ptrPos = 0;
 
+    // Break msgCounter into two bites
+    unsigned char high;
+    unsigned char low;
+    breakMsgIdToBytes(&high, &low, progInt->comDetails->msgCounter);
+
     // MessageType
     switch (type)
     {
@@ -49,19 +54,18 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
         return true;
         break;
     case cmd_EXIT: 
-        buffer->data[0] = (char) msg_BYE;
-        buffer->used = 1;
+        buffer->data[0] = (unsigned char) msg_BYE;
+        buffer->data[1] = high;
+        buffer->data[2] = low;
+        buffer->used = 3;
         return true; 
         break;
     default: errHandling("Unknown command type in assembleProtocol() function", 1) /*TODO: change error code*/; break;
     }
     ptrPos += 1;
 
-    // MessageID
-    // Break msgCounter into two bites
-    unsigned char high = (unsigned char)((comDetails->msgCounter) >> 8);
-    unsigned char low = (unsigned char)((comDetails->msgCounter) & 0xff);
 
+    // MessageID
     buffer->data[1] = high;  
     ptrPos += 1;
     buffer->data[2] = low;  
@@ -81,7 +85,7 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
     {
         if(comDetails->channelID.data == NULL)
         { 
-            safePrintStdout("ChannelID not provided, cannot rename! (Did you use /auth before this commands?). Use /help for help.");
+            safePrintStdout("System: ChannelID not provided, cannot rename! (Did you use /auth before this commands?). Use /help for help.\n");
             return false;
         }
         // Rename: ChannelID
@@ -95,7 +99,7 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
     {
         if(comDetails->displayName.data == NULL)
         { 
-            safePrintStdout("ChannelID not provided, cannot rename! (Did you use /auth before this commands?). Use /help for help.");
+            safePrintStdout("System: ChannelID not provided, cannot rename! (Did you use /auth before this commands?). Use /help for help.\n");
             return false;
         }
         // Rename: ChannelID
@@ -158,6 +162,19 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
+
+/**
+ * @brief Converts 16bit message id into an two unsinged chars
+ * 
+ * @param high Output pointer to unsigned char, upper/higher half of number
+ * @param low Output pointer to unsigned char, lower half of number
+ * @param msgCounter Input number to be separated
+ */
+void breakMsgIdToBytes(unsigned char* high, unsigned char* low, uint16_t msgCounter)
+{
+    *high = (unsigned char)((msgCounter) >> 8);
+    *low = (unsigned char)((msgCounter) & 0xff);
+}
 
 /**
  * @brief Converts bwo bytes from input char array into 16bit usigned integer

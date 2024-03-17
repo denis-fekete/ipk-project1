@@ -19,13 +19,14 @@
 // Defines, typedefs and structures
 // ----------------------------------------------------------------------------
 
-typedef enum MessageFlags {msg_flag_NONE, msg_flag_DO_NOT_RESEND} msg_flags;
+typedef enum MessageFlags {msg_flag_NONE, msg_flag_DO_NOT_RESEND, msg_flag_AUTH, msg_flag_MSG} msg_flags;
 
 typedef struct Message {
     Buffer* buffer;
     struct Message* behindMe;
     u_int8_t sendCount;
     msg_flags msgFlags;
+    bool confirmed;
 } Message;
 
 typedef struct MessageQueue {
@@ -53,13 +54,36 @@ void queueInit(MessageQueue* queue);
  */
 void queueDestroy(MessageQueue* queue);
 
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
 /**
  * @brief Return pointer to the first message 
  * 
  * @param queue Queue from which the message will be returned 
- * @return Buffer* First message
+ * @return Message* First message
  */
-Buffer* queueGetMessage(MessageQueue* queue);
+Message* queueGetMessage(MessageQueue* queue);
+
+/**
+ * @brief Return pointer to the first message 
+ * 
+ * @warning This function does not work with queue mutex<br>
+ * 
+ * @warning This function does not quarantee that the pointer won't be 
+ * freed leading undefined behavior or Segmentation Fault. Use 
+ * queueGetMessageNoUnlock() instead ... however incorrect use of this
+ * function may lead to queue ending in locked state.
+ * 
+ * @param queue Queue from which the message will be returned 
+ * @return Message* 
+ */
+Message* queueGetMessageNoMutex(MessageQueue* queue);
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
 
 /**
  * @brief Adds new message to the queue at the end
@@ -78,11 +102,40 @@ void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags);
 void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags);
 
 /**
+ * @brief Adds new message to the queue at the start
+ * 
+ * @warning This function doesn't use mutexes and is not reentrant,
+ * so prevention of data corruption is on programmer
+ * 
+ * @param queue MessageQueue to which will the new message be added
+ * @param buffer is and input buffer from which the new message will be created
+ */
+void queueAddMessagePriorityNoMutex(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags);
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
+/**
  * @brief Deletes first message and moves queue forward
  * 
  * @param queue Queue from which will be the message deleted
  */
 void queuePopMessage(MessageQueue* queue);
+
+/**
+ * @brief Deletes first message and moves queue forward
+ * 
+ * @warning This function doesn't use mutexes and is not reentrant,
+ * so prevention of data corruption is on programmer
+ * 
+ * @param queue Queue from which will be the message deleted
+ */
+void queuePopMessageNoMutex(MessageQueue* queue);
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
 
 /**
  * @brief Check if MessageQueue is empty
@@ -101,12 +154,30 @@ bool queueIsEmpty(MessageQueue* queue);
  */
 size_t queueLength(MessageQueue* queue);
 
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
 /**
  * @brief Adds ONE to sended counter of first message 
  * 
  * @param queue queue to which first message counter will be incremented
  */
 void queueMessageSended(MessageQueue* queue);
+
+/**
+ * @brief Adds ONE to sended counter of first message 
+ * 
+ * @warning This function doesn't use mutexes and is not reentrant,
+ * so prevention of data corruption is on programmer
+ * 
+ * @param queue queue to which first message counter will be incremented
+ */
+void queueMessageSendedNoMutex(MessageQueue* queue);
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
 
 /**
  * @brief Returns number of times this message was sended 
@@ -117,42 +188,19 @@ void queueMessageSended(MessageQueue* queue);
 u_int8_t queueGetSendedCounter(MessageQueue* queue);
 
 /**
- * @brief Return pointer to the first message but don't unlock queue.
- * 
- * Usage:
- * Buffer* b = queueGetMessageNoUnlock(queue_ptr); 
- * // ... do something with b 
- * queueUnlock(queue_ptr);
- * 
- * @warning queueUnlock() must be called after this function.
- * @param queue Queue from which the message will be returned 
- * @return Message* 
- */
-Buffer* queueGetMessageNoUnlock(MessageQueue* queue);
-
-/**
- * @brief Unlock queue
- * 
- * Usage:
- * Buffer* b = queueGetMessageNoUnlock(queue_ptr); 
- * // ... do something with b 
- * queueUnlock(queue_ptr);
- * 
- * @warning DO NOT USE! if you haven't read documentation.
- * 
- * @param queue Queue to be unlocked
- */
-void queueUnlock(MessageQueue* queue);
-
-/**
- * @brief Deletes first message and moves queue forward
+ * @brief Returns number of times this message was sended
  * 
  * @warning This function doesn't use mutexes and is not reentrant,
  * so prevention of data corruption is on programmer
  * 
- * @param queue Queue from which will be the message deleted
+ * @param queue queue from which first message will be checked
+ * @return u_int8_t number of times first message in queue was sended 
  */
-void queuePopMessageNoMutex(MessageQueue* queue);
+u_int8_t queueGetSendedCounterNoMutex(MessageQueue* queue);
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
 
 /**
  * @brief Returns value of first message flags
@@ -161,5 +209,37 @@ void queuePopMessageNoMutex(MessageQueue* queue);
  * @return msg_flags flags to be returned
  */
 msg_flags queueGetMessageFlags(MessageQueue* queue);
+
+/**
+ * @brief Returns value of first message flags
+ * 
+ * @warning This function doesn't use mutexes and is not reentrant,
+ * so prevention of data corruption is on programmer
+ * 
+ * @param queue Queue from which the first message's flags will be returned 
+ * @return msg_flags flags to be returned
+ */
+msg_flags queueGetMessageFlagsNoMutex(MessageQueue* queue);
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
+/**
+ * @brief Unlock queue mutex
+ * 
+ * @warning DO NOT USE! if you haven't read documentation.
+ * 
+ * @param queue Queue to be unlocked
+ */
+void queueUnlock(MessageQueue* queue);
+
+/**
+ * @brief Lock queue mutex
+ * @warning DO NOT USE! if you haven't read documentation.
+ * 
+ * @param queue Queue to be unlocked
+ */
+void queueLock(MessageQueue* queue);
 
 #endif

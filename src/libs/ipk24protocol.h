@@ -53,6 +53,15 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
 cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4], bool* eofDetected);
 
 /**
+ * @brief Converts 16bit message id into an two unsinged chars
+ * 
+ * @param high Output pointer to unsigned char, upper/higher half of number
+ * @param low Output pointer to unsigned char, lower half of number
+ * @param msgCounter Input number to be separated
+ */
+void breakMsgIdToBytes(unsigned char* high, unsigned char* low, uint16_t msgCounter);
+
+/**
  * @brief Converts bwo bytes from input char array into 16bit usigned integer
  * 
  * @param buffer Input char array
