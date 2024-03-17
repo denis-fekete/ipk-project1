@@ -159,6 +159,23 @@ int isEndingCharacter(char input);
  */
 void stringReplace(char* dst, char* src, size_t len);
 
+/**
+ * @brief Prints help menu when user inputs /help command 
+ */
+void printCliHelpMenu(const char* executableName);
+
+/**
+ * @brief Prints user help menu in running client
+ * 
+ * @param progInt Pointer to ProgramInterface for thread-safe printing
+ */
+void printUserHelpMenu(ProgramInterface* progInt);
+
+/**
+ * @brief Macro for safe printing using "global" stdoutMutex.
+ * 
+ * Uses fflush after message has been written
+ */
 #define safePrintStdout(...) \
     pthread_mutex_lock(progInt->threads->stdoutMutex);  \
     printf(__VA_ARGS__);                                \

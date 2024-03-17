@@ -23,10 +23,11 @@
  * @param buffer Output buffer to be trasmited to the server
  * @param comDetails CommunicationDetails need by some commands like cmd_JOIN 
  * that don't have all informations provided by user at start
+ * @param progInt Pointer to ProgramInterface
  * 
  * @return Returns true if buffer can be trasmitted to the server
  */
-bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, CommunicationDetails* comDetails)
+bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, CommunicationDetails* comDetails, ProgramInterface* progInt)
 {
     size_t expectedSize = commands[0].len + commands[1].len + commands[2].len + commands[3].len + 10;
     bufferResize(buffer, expectedSize);
@@ -80,7 +81,7 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
     {
         if(comDetails->channelID.data == NULL)
         { 
-            displayMsgToUser("ChannelID not provided, cannot rename! (Did you use /auth before this commands?). Use /help for help.");
+            safePrintStdout("ChannelID not provided, cannot rename! (Did you use /auth before this commands?). Use /help for help.");
             return false;
         }
         // Rename: ChannelID
@@ -94,7 +95,7 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
     {
         if(comDetails->displayName.data == NULL)
         { 
-            displayMsgToUser("ChannelID not provided, cannot rename! (Did you use /auth before this commands?). Use /help for help.");
+            safePrintStdout("ChannelID not provided, cannot rename! (Did you use /auth before this commands?). Use /help for help.");
             return false;
         }
         // Rename: ChannelID
@@ -126,7 +127,7 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
     {
         if(comDetails->displayName.data == NULL)
         { 
-            displayMsgToUser("Displayname not provided, cannot join! Use /help for help.");
+            safePrintStdout("Displayname not provided, cannot join! Use /help for help.");
             return false;
         }
 

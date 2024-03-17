@@ -27,12 +27,14 @@ void assembleConfirmProtocol(Buffer* recvBuffer, Buffer* confirmBuffer, ProgramI
     commands[2].start = NULL; commands[2].len = 0;
     commands[3].start = NULL; commands[3].len = 0;
 
-    bool res = assembleProtocol(cmd_CONF, commands, confirmBuffer, progInt->comDetails);
+    bool res = assembleProtocol(cmd_CONF, commands, confirmBuffer, progInt->comDetails, progInt);
     if(!res)
     {
         errHandling("Assembling of confrim protocol failed\n", 1); // TODO:
     }
 }
+
+
 // use macro for loop overhead because it would be too much tabulators
 #define LOOP_WITH_EPOLL_START \
     do { \

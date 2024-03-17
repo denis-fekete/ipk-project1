@@ -22,11 +22,21 @@
  * @param buffer Output buffer to be trasmited to the server
  * @param comDetails CommunicationDetails need by some commands like cmd_JOIN 
  * that don't have all informations provided by user at start
+ * @param progInt Pointer to ProgramInterface
  * 
  * @return Returns true if buffer can be trasmitted to the server
  */
-bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, CommunicationDetails* comDetails);
+bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, CommunicationDetails* comDetails, ProgramInterface* progInt);
 
+/**
+ * @brief Disassebles protocol from provided Buffer to commands, 
+ * message type and message ID
+ * 
+ * @param buffer Input buffer which will be disassembled 
+ * @param commands Output commands which will be filled
+ * @param msgType Message type that was detected
+ * @param msgId Message ID that was detected
+ */
 void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, u_int16_t* msgId);
 
 /**
