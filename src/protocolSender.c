@@ -53,13 +53,6 @@ void* protocolSender(void* vargp)
             // renew message to be send
             msgToBeSend = queueGetMessageNoMutex(sendingQueue);
         }
-    
-        // pop confirmed messages
-        // while(msgToBeSend->confirmed == true)
-        // {
-        //     queuePopMessageNoMutex(sendingQueue);
-        //     msgToBeSend = queueGetMessageNoMutex(sendingQueue);
-        // }
 
         // check if message wasn't resend more than udpMaxTries
         if(queueGetSendedCounterNoMutex(sendingQueue) > (progInt->netConfig->udpMaxRetries))
@@ -80,6 +73,9 @@ void* protocolSender(void* vargp)
             continue;
         }
 
+
+        queueSetMsgIDNoMutex(sendingQueue, progInt);
+
         #ifdef DEBUG
             debugPrint(stdout, "DEBUG: Sender (queue len: %li", sendingQueue->len);
             debugPrint(stdout,", tried to send a message:\n");
@@ -87,7 +83,6 @@ void* protocolSender(void* vargp)
         #endif
 
         int bytesTx; // number of sended bytes
-
         // send buffer to the server 
         bytesTx = sendto(progInt->netConfig->openedSocket, msgToBeSend->buffer->data, 
                         msgToBeSend->buffer->used, flags, progInt->netConfig->serverAddress, 

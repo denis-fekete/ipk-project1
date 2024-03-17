@@ -21,13 +21,12 @@
  * @param type Recognized type of command user provided
  * @param commands Separated commands from user input
  * @param buffer Output buffer to be trasmited to the server
- * @param comDetails CommunicationDetails need by some commands like cmd_JOIN 
  * that don't have all informations provided by user at start
  * @param progInt Pointer to ProgramInterface
  * 
  * @return Returns true if buffer can be trasmitted to the server
  */
-bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, CommunicationDetails* comDetails, ProgramInterface* progInt)
+bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, ProgramInterface* progInt)
 {
     size_t expectedSize = commands[0].len + commands[1].len + commands[2].len + commands[3].len + 10;
     bufferResize(buffer, expectedSize);
@@ -35,8 +34,8 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
     size_t ptrPos = 0;
 
     // Break msgCounter into two bites
-    unsigned char high;
-    unsigned char low;
+    char high;
+    char low;
     breakMsgIdToBytes(&high, &low, progInt->comDetails->msgCounter);
 
     // MessageType
@@ -64,7 +63,6 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
     }
     ptrPos += 1;
 
-
     // MessageID
     buffer->data[1] = high;  
     ptrPos += 1;
@@ -83,28 +81,30 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
     }
     else if(type == cmd_RENAME)
     {
-        if(comDetails->channelID.data == NULL)
+        if(progInt->comDetails->channelID.data == NULL)
         { 
             safePrintStdout("System: ChannelID not provided, cannot rename! (Did you use /auth before this commands?). Use /help for help.\n");
             return false;
         }
         // Rename: ChannelID
-        stringReplace(&( buffer->data[ptrPos] ), comDetails->channelID.data, comDetails->channelID.used);
-        ptrPos += comDetails->channelID.used;
+        stringReplace(&( buffer->data[ptrPos] ), progInt->comDetails->channelID.data,
+                progInt->comDetails->channelID.used);
+        ptrPos += progInt->comDetails->channelID.used;
         // 0 byte
         buffer->data[ptrPos] = 0;
         ptrPos += 1;
     }
     else if(type == cmd_MSG)
     {
-        if(comDetails->displayName.data == NULL)
+        if(progInt->comDetails->displayName.data == NULL)
         { 
             safePrintStdout("System: ChannelID not provided, cannot rename! (Did you use /auth before this commands?). Use /help for help.\n");
             return false;
         }
         // Rename: ChannelID
-        stringReplace(&( buffer->data[ptrPos] ), comDetails->displayName.data, comDetails->displayName.used);
-        ptrPos += comDetails->displayName.used;
+        stringReplace(&( buffer->data[ptrPos] ), progInt->comDetails->displayName.data,
+            progInt->comDetails->displayName.used);
+        ptrPos += progInt->comDetails->displayName.used;
         // 0 byte
         buffer->data[ptrPos] = 0;
         ptrPos += 1;
@@ -129,14 +129,15 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
     } 
     else if (type == cmd_JOIN) // Join: DisplayName
     {
-        if(comDetails->displayName.data == NULL)
+        if(progInt->comDetails->displayName.data == NULL)
         { 
             safePrintStdout("Displayname not provided, cannot join! Use /help for help.");
             return false;
         }
 
-        stringReplace(&( buffer->data[ptrPos] ), comDetails->displayName.data, comDetails->displayName.used);
-        ptrPos += comDetails->displayName.used;
+        stringReplace(&( buffer->data[ptrPos] ), progInt->comDetails->displayName.data,
+            progInt->comDetails->displayName.used);
+        ptrPos += progInt->comDetails->displayName.used;
         // 0 byte
         buffer->data[ptrPos] = 0;
         ptrPos += 1;
@@ -170,7 +171,7 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Commun
  * @param low Output pointer to unsigned char, lower half of number
  * @param msgCounter Input number to be separated
  */
-void breakMsgIdToBytes(unsigned char* high, unsigned char* low, uint16_t msgCounter)
+void breakMsgIdToBytes(char* high, char* low, uint16_t msgCounter)
 {
     *high = (unsigned char)((msgCounter) >> 8);
     *low = (unsigned char)((msgCounter) & 0xff);

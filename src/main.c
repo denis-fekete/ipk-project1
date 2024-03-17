@@ -340,17 +340,17 @@ int main(int argc, char* argv[])
         }
 
         // Assembles array of bytes into Buffer protocolMsg, returns if 
-        // message can be trasmitted   
-        canBeSended = assembleProtocol(cmdType, commands, &protocolMsg, &comDetails, progInt);
+        // message can be trasmitted
+        canBeSended = assembleProtocol(cmdType, commands, &protocolMsg, progInt);
 
         if(canBeSended)
         {
             // // add message to the queue
-            // queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, msg_flag_NONE);
+            // queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags);
             // comDetails.msgCounter += 1;
 
             // if sendingQueue is empty, sender is asleep waiting
-            // wake him up
+            // wake it up
             if(queueIsEmpty(progInt->threads->sendingQueue))
             {
                 pthread_cond_signal(&senderEmptyQueueCond);
@@ -358,7 +358,6 @@ int main(int argc, char* argv[])
             // TODO: swap with above
             // add message to the queue
             queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags);
-            comDetails.msgCounter += 1;
         }
         
         // Exit loop if /exit detected 

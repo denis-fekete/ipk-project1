@@ -47,7 +47,6 @@ typedef enum MessageType {
     msg_BYE = 0xFF
   } msg_t;
 
-#include "customtypes.h"
 // ----------------------------------------------------------------------------
 //  Structures
 // ----------------------------------------------------------------------------
@@ -64,6 +63,7 @@ typedef struct BytesBlock {
     size_t len; // length of the block
 } BytesBlock;
 
+#include "customtypes.h"
 
 typedef struct CommunicationDetails {
     Buffer displayName;
@@ -191,6 +191,19 @@ void setProgramState(ProgramInterface* progInt, fsm_t newState);
  * @brief Returns program state with thread protecion using mutex
  */
 fsm_t getProgramState(ProgramInterface* progInt);
+
+
+/**
+ * @brief Adds ONE to message counter
+ * 
+ * @param newState New state to be set
+ */
+void incMessageCounter(ProgramInterface* progInt);
+
+/**
+ * @brief Returns message counter
+ */
+uint16_t getMessageCounter(ProgramInterface* progInt);
 
 /**
  * @brief Macro for safe printing using "global" stdoutMutex.

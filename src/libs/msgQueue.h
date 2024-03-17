@@ -11,9 +11,12 @@
 #ifndef MSG_LISH_H
 #define MSG_LISH_H
 
+#include "pthread.h"
+
 #include "buffer.h"
 #include "utils.h"
-#include "pthread.h"
+#include "ipk24protocol.h"
+
 
 // ----------------------------------------------------------------------------
 // Defines, typedefs and structures
@@ -241,5 +244,28 @@ void queueUnlock(MessageQueue* queue);
  * @param queue Queue to be unlocked
  */
 void queueLock(MessageQueue* queue);
+
+/**
+ * @brief Sets message id of the first message based on program 
+ * interface message counter
+ * 
+ * @param queue Pointer to queue
+ * @param progInt Pointer to ProgramInterface based that holds correct message
+ * counter
+ */
+void queueSetMsgID(MessageQueue* queue, ProgramInterface* progInt);
+
+/**
+ * @brief Sets message id of the first message based on program 
+ * interface message counter
+ * 
+* @warning This function doesn't use mutexes and is not reentrant,
+ * so prevention of data corruption is on programmer
+ * 
+ * @param queue Pointer to queue
+ * @param progInt Pointer to ProgramInterface based that holds correct message
+ * counter
+ */
+void queueSetMsgIDNoMutex(MessageQueue* queue, ProgramInterface* progInt);
 
 #endif

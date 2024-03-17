@@ -12,7 +12,6 @@
 
 #include "sys/types.h"
 #include "networkCom.h"
-#include "msgQueue.h"
 
 struct Buffer;
 struct BytesBlock;
@@ -37,5 +36,7 @@ typedef enum FSM fsm_t;
 typedef enum CommandType cmd_t;
 typedef enum Protocols prot_t;
 typedef enum MessageType msg_t;
+
+#include "msgQueue.h"
 
 #endif

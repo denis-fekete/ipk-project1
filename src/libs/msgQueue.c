@@ -391,6 +391,48 @@ msg_flags queueGetMessageFlags(MessageQueue* queue)
 }
 
 /**
+ * @brief Sets message id of the first message based on program 
+ * interface message counter
+ * 
+ * @param queue Pointer to queue
+ * @param progInt Pointer to ProgramInterface based that holds correct message
+ * counter
+ */
+void queueSetMsgID(MessageQueue* queue, ProgramInterface* progInt)
+{
+    THREAD_LOCK;
+    queueSetMsgIDNoMutex(queue, progInt);
+    THREAD_UNLOCK;
+}
+
+#define HIGHER_BYTE_POSTION 1
+#define LOWER_BYTE_POSTION 2
+/**
+ * @brief Sets message id of the first message based on program 
+ * interface message counter
+ * 
+* @warning This function doesn't use mutexes and is not reentrant,
+ * so prevention of data corruption is on programmer
+ * 
+ * @param queue Pointer to queue
+ * @param progInt Pointer to ProgramInterface based that holds correct message
+ * counter
+ */
+void queueSetMsgIDNoMutex(MessageQueue* queue, ProgramInterface* progInt)
+{
+    if(queue->first != NULL)
+    {
+        breakMsgIdToBytes(
+            &(queue->first->buffer->data[HIGHER_BYTE_POSTION]),
+            &(queue->first->buffer->data[LOWER_BYTE_POSTION]),
+            progInt->comDetails->msgCounter);
+    }
+}
+#undef HIGHER_BYTE_POSTION
+#undef LOWER_BYTE_POSTION
+
+
+/**
  * @brief Returns value of first message flags
  * 
  * @warning This function doesn't use mutexes and is not reentrant,

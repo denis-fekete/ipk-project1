@@ -27,7 +27,7 @@ void assembleConfirmProtocol(Buffer* recvBuffer, Buffer* confirmBuffer, ProgramI
     commands[2].start = NULL; commands[2].len = 0;
     commands[3].start = NULL; commands[3].len = 0;
 
-    bool res = assembleProtocol(cmd_CONF, commands, confirmBuffer, progInt->comDetails, progInt);
+    bool res = assembleProtocol(cmd_CONF, commands, confirmBuffer, progInt);
     if(!res)
     {
         errHandling("Assembling of confrim protocol failed\n", 1); // TODO:
@@ -137,11 +137,14 @@ void* protocolReceiver(void *vargp)
                 {
                     u_int16_t queueTopMsgID = convert2BytesToUInt(topOfQueue->buffer->data);
                 
+                    // if first in queue is same as incoming confirm, confirm message
                     if(msgID == queueTopMsgID)
                     {
                         // topOfQueue->confirmed = true;
                         queuePopMessageNoMutex(sendingQueue);
                         
+                        progInt->comDetails->msgCounter = msgID + 1;
+
                         pthread_cond_signal(progInt->threads->rec2SenderCond);
                         debugPrint(stdout, "DEBUG: Msg sended by sender was "
                             "confirmed, id: %i\n", 
@@ -175,6 +178,7 @@ void* protocolReceiver(void *vargp)
                         queueAddMessagePriority(sendingQueue, &sendConfirm, msg_flag_DO_NOT_RESEND);
                         // set state to OPEN
                         setProgramState(progInt, fsm_OPEN);
+                        progInt->comDetails->msgCounter = msgID + 1;
 
                         // ping / signal sender
                         pthread_cond_signal(progInt->threads->senderEmptyQueueCond);

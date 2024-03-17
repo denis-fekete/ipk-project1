@@ -221,3 +221,23 @@ fsm_t getProgramState(ProgramInterface* progInt)
 
     return val;
 }
+
+/**
+ * @brief Adds ONE to message counter
+ * 
+ * @param newState New state to be set
+ */
+void incMessageCounter(ProgramInterface* progInt)
+{
+    if(progInt){}
+}
+
+/**
+ * @brief Returns message counter
+ */
+uint16_t getMessageCounter(ProgramInterface* progInt)
+{
+    if(progInt){}
+    return 1;
+
+}

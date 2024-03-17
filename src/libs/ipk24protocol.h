@@ -20,13 +20,12 @@
  * @param type Recognized type of command user provided
  * @param commands Separated commands from user input
  * @param buffer Output buffer to be trasmited to the server
- * @param comDetails CommunicationDetails need by some commands like cmd_JOIN 
  * that don't have all informations provided by user at start
  * @param progInt Pointer to ProgramInterface
  * 
  * @return Returns true if buffer can be trasmitted to the server
  */
-bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, CommunicationDetails* comDetails, ProgramInterface* progInt);
+bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, ProgramInterface* progInt);
 
 /**
  * @brief Disassebles protocol from provided Buffer to commands, 
@@ -59,7 +58,7 @@ cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4], bool* eofDetected)
  * @param low Output pointer to unsigned char, lower half of number
  * @param msgCounter Input number to be separated
  */
-void breakMsgIdToBytes(unsigned char* high, unsigned char* low, uint16_t msgCounter);
+void breakMsgIdToBytes(char* high, char* low, uint16_t msgCounter);
 
 /**
  * @brief Converts bwo bytes from input char array into 16bit usigned integer
