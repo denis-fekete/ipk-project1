@@ -82,12 +82,13 @@ void* protocolReceiver(void *vargp)
     // Set up epoll to react to the opened socket
     // ------------------------------------------------------------------------
 
-    #define MAX_EVENTS 3
-    struct epoll_event event;
-    struct epoll_event events[MAX_EVENTS];
-    int epollFd = epoll_create1(0);
-    event.events = EPOLLIN; //want to read
-    event.data.fd = progInt->netConfig->openedSocket;
+    // TODO: DELETE
+    // #define MAX_EVENTS 3
+    // struct epoll_event event;
+    // struct epoll_event events[MAX_EVENTS];
+    // int epollFd = epoll_create1(0);
+    // event.events = EPOLLIN; //want to read
+    // event.data.fd = progInt->netConfig->openedSocket;
 
     struct timeval tv;
     tv.tv_sec = 1;
@@ -101,7 +102,9 @@ void* protocolReceiver(void *vargp)
     // Set up variables for receiving messages
     // ------------------------------------------------------------------------
 
-    LOOP_WITH_EPOLL_START
+     // TODO: DELETE
+    // LOOP_WITH_EPOLL_START 
+    do
     {
         int bytesRx = recvfrom(progInt->netConfig->openedSocket, serverResponse.data,
                                 serverResponse.allocated, flags, 
@@ -200,7 +203,9 @@ void* protocolReceiver(void *vargp)
             debugPrintSeparator(stdout);
         #endif
     }
-    LOOP_WITH_EPOLL_END
+    while(progInt->threads->continueProgram);
+    // TODO: DELETE
+    // LOOP_WITH_EPOLL_END
 
     free(serverResponse.data);
     debugPrint(stdout, "DEBUG: Receiver ended\n");

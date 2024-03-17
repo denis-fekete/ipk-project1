@@ -302,6 +302,8 @@ bool queueIsEmpty(MessageQueue* queue)
         return true;
     }
 
+    // debugPrint(stdout, "Left it queue: %li\n", queue->len);
+
     THREAD_UNLOCK;
     return false;
 }
