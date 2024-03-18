@@ -130,7 +130,7 @@ void* protocolReceiver(void *vargp)
             case msg_CONF:
                 // get pointer to the first queue
                 queueLock(sendingQueue);
-                topOfQueue = queueGetMessageNoMutex(sendingQueue);
+                topOfQueue = queueGetMessage(sendingQueue);
 
                 // check if top is not empty
                 if(topOfQueue != NULL)
@@ -140,8 +140,8 @@ void* protocolReceiver(void *vargp)
                     // if first in queue is same as incoming confirm, confirm message
                     if(msgID == queueTopMsgID)
                     {
-                        // topOfQueue->confirmed = true;
-                        queuePopMessageNoMutex(sendingQueue);
+                        // confirm message
+                        topOfQueue->confirmed = true;
                         
                         progInt->comDetails->msgCounter = msgID + 1;
 

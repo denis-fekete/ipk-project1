@@ -17,6 +17,46 @@
     timeToWait.tv_sec += timeToWait.tv_nsec / (1000 * 1000 * 1000);             \
     timeToWait.tv_nsec %= (1000 * 1000 * 1000);
 
+/**
+ * @brief Filters out messages from provided queue that were sent
+ *  more than specified times in NetworkConfiguration or that are
+ * already confirmed
+ * 
+ * @param sendingQueue Pointer to queue from which should messages be filtered 
+ * @param progInt Pointer to ProgramInterface
+ */
+void filterOutMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
+{
+    Message* msgToBeSend = queueGetMessage(sendingQueue);
+    while(msgToBeSend != NULL)
+    {
+        // if message was send more than maximum udp retries
+        if( queueGetSendedCounter(sendingQueue) > progInt->netConfig->udpMaxRetries )
+        {
+            // check if discarded message wasn't an auth message
+            msg_flags flags = queueGetMessageFlags(sendingQueue);
+            
+            if(flags == msg_flag_AUTH && getProgramState(progInt) == fsm_AUTH_SENDED) {
+                safePrintStdout("System: Authetication message request timed out. Please try again.\n");
+            } else {
+                safePrintStdout("System: Request timed out. Last message was not sent.\n");   
+            }
+        }
+        // if message wasnt already confirmed
+        else if (msgToBeSend->confirmed == false)
+        {
+            // try send it again
+            break;
+        }
+
+        // delete confirmed message
+        queuePopMessage(sendingQueue);
+
+        // get new one message
+        msgToBeSend = queueGetMessage(sendingQueue);
+    }
+}
+
 void* protocolSender(void* vargp)
 {
     ProgramInterface* progInt = (ProgramInterface*) vargp;
@@ -29,52 +69,67 @@ void* protocolSender(void* vargp)
 
     do 
     {
+        // --------------------------------------------------------------------
+        // Filter out confirmed messages or messages with too many resends
+        // --------------------------------------------------------------------
+     
+        queueLock(sendingQueue);
+
+        filterOutMessages(sendingQueue, progInt);
+
+        // make room for someone who is waiting
+        queueUnlock(sendingQueue);
+
+        // --------------------------------------------------------------------
+        // If queue is empty wait for someone to ping sender that msg was added
+        // --------------------------------------------------------------------
+
+        queueLock(sendingQueue);
         // if queue is empty wait until it is filled
         if(queueIsEmpty(sendingQueue))
         {
+            queueUnlock(sendingQueue);
             // use pthread wait for main thread to ping that queue is not 
             // empty or timeout to expire
-            pthread_cond_wait(progInt->threads->senderEmptyQueueCond, progInt->threads->senderEmptyQueueMutex);
+            pthread_cond_wait(progInt->threads->senderEmptyQueueCond, 
+                progInt->threads->senderEmptyQueueMutex);
             continue;
         }
+        
+        queueUnlock(sendingQueue);
+        // make room for someone who is waiting
+
+        // --------------------------------------------------------------------
+        // If in state before OPEN, do not send messages
+        // --------------------------------------------------------------------
 
         queueLock(sendingQueue);
 
-        Message* msgToBeSend = queueGetMessageNoMutex(sendingQueue);
-
+        // get msg again in case someone changed first it ... this is primary 
+        // for receiver importing priority messages like CONFIRM
+        Message* msgToBeSend = queueGetMessage(sendingQueue); 
+        
         // if program is not in open state and message to be send is not auth 
-        if(getProgramState(progInt) < fsm_OPEN && 
-            msgToBeSend->msgFlags != msg_flag_AUTH)
+        if(getProgramState(progInt) < fsm_OPEN)
         {
-            // wait for receiver to signal that authentication was confirmed
-            queueUnlock(sendingQueue);
-            pthread_cond_wait(progInt->threads->rec2SenderCond, progInt->threads->rec2SenderMutex);
-            queueLock(sendingQueue);
-            // renew message to be send
-            msgToBeSend = queueGetMessageNoMutex(sendingQueue);
-        }
-
-        // check if message wasn't resend more than udpMaxTries
-        if(queueGetSendedCounterNoMutex(sendingQueue) > (progInt->netConfig->udpMaxRetries))
-        {
-            // check if discarded message wasn't an auth message
-            msg_flags flags = queueGetMessageFlagsNoMutex(sendingQueue);
-            if(flags == msg_flag_AUTH && getProgramState(progInt) == fsm_AUTH_SENDED)
+            if(queueGetMessageFlags(sendingQueue) != msg_flag_AUTH)
             {
-                safePrintStdout("System: Authetication message request timed out. Please try again.\n");
+                queueUnlock(sendingQueue);
+                // wait for receiver to signal that authentication was confirmed
+                pthread_cond_wait(progInt->threads->rec2SenderCond, 
+                    progInt->threads->rec2SenderMutex);
+
+                queueLock(sendingQueue);
+                msgToBeSend = queueGetMessage(sendingQueue); 
             }
-            #ifdef DEBUG
-                debugPrint(stdout, "Deleted message:\n")
-                bufferPrint(msgToBeSend->buffer, 2);
-            #endif
-            queuePopMessageNoMutex(sendingQueue);
-            queueUnlock(sendingQueue);
-            safePrintStdout("System: Request timed out. Last message was not sent.\n");
-            continue;
         }
 
+        // --------------------------------------------------------------------
+        // Send message
+        // --------------------------------------------------------------------
 
-        queueSetMsgIDNoMutex(sendingQueue, progInt);
+        // set correct message id right before sending it
+        queueSetMsgID(sendingQueue, progInt);
 
         #ifdef DEBUG
             debugPrint(stdout, "DEBUG: Sender (queue len: %li", sendingQueue->len);
@@ -88,6 +143,8 @@ void* protocolSender(void* vargp)
                         msgToBeSend->buffer->used, flags, progInt->netConfig->serverAddress, 
                         progInt->netConfig->serverAddressSize);
 
+        // store sended messeges's flags
+        msg_flags sendedMessageFlags = queueGetMessageFlags(sendingQueue);
 
         if(bytesTx < 0)
         {
@@ -99,13 +156,29 @@ void* protocolSender(void* vargp)
             debugPrintSeparator(stdout);
         #endif
 
-        queueMessageSendedNoMutex(sendingQueue);
-        queueUnlock(sendingQueue);
-        
-        // if authentication is wating to be sended, switch state to sended
-        if(getProgramState(progInt) == fsm_AUTH_W82_BE_SENDED)
+
+        // if DO_NOT_RESEND flags is set, delete msg from queue right away
+        if(sendedMessageFlags == msg_flag_DO_NOT_RESEND)
         {
-            if(queueGetMessageFlags(sendingQueue) == msg_flag_AUTH)
+            queuePopMessage(sendingQueue);
+        }
+        else
+        {
+            queueMessageSended(sendingQueue);
+        }
+
+        queueUnlock(sendingQueue);
+
+        
+        // --------------------------------------------------------------------
+        // Update FSM
+        // --------------------------------------------------------------------
+        
+        switch (getProgramState(progInt))
+        {
+        case fsm_AUTH_W82_BE_SENDED:
+            // if authentication is wating to be sended, switch state to sended
+            if(sendedMessageFlags == msg_flag_AUTH)
             {
                 setProgramState(progInt, fsm_AUTH_SENDED);
             }
@@ -113,21 +186,17 @@ void* protocolSender(void* vargp)
             {
                 errHandling("Sender sended message that isn't AUTH in non-open state", 1); // TODO:
             }
+            break;
+        
+        default:
+            break;
         }
-
-        queueLock(sendingQueue);
-        // if DO_NOT_RESEND flags is set, delete msg from queue right away
-        if(queueGetMessageFlagsNoMutex(sendingQueue) == msg_flag_DO_NOT_RESEND)
-        {
-            queuePopMessageNoMutex(sendingQueue);
-        }
-        queueUnlock(sendingQueue);
 
         // After message has been sended wait udpTimeout time until 
         // attempting to resend it / again
+        // only receiver can signal sender from this state
         TIMEOUT_CALCULATION(progInt->netConfig->udpTimeout);
         pthread_cond_timedwait(progInt->threads->rec2SenderCond, progInt->threads->rec2SenderMutex, &timeToWait);
-
 
     // repeat until continueProgram is false and queue is empty
     } while( progInt->threads->continueProgram || !(queueIsEmpty(sendingQueue)) );

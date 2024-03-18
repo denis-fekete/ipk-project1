@@ -44,7 +44,7 @@ typedef struct MessageQueue {
 // ----------------------------------------------------------------------------
 
 /**
- * @brief Initializes MessageQueue
+ * @brief Initializes MessageQueue with default size (DEFAULT_MESSAGE_QUEUE_SIZE)
  * 
  * @param queue MessageQueue to be initalized
  */
@@ -62,31 +62,43 @@ void queueDestroy(MessageQueue* queue);
 // ----------------------------------------------------------------------------
 
 /**
- * @brief Return pointer to the first message 
+ * @brief Unlock queue mutex
  * 
- * @param queue Queue from which the message will be returned 
- * @return Message* First message
+ * @param queue Queue to be unlocked
  */
-Message* queueGetMessage(MessageQueue* queue);
+void queueUnlock(MessageQueue* queue);
 
 /**
- * @brief Return pointer to the first message 
+ * @brief Lock queue mutex
  * 
- * @warning This function does not work with queue mutex<br>
- * 
- * @warning This function does not quarantee that the pointer won't be 
- * freed leading undefined behavior or Segmentation Fault. Use 
- * queueGetMessageNoUnlock() instead ... however incorrect use of this
- * function may lead to queue ending in locked state.
- * 
- * @param queue Queue from which the message will be returned 
- * @return Message* 
+ * @param queue Queue to be unlocked
  */
-Message* queueGetMessageNoMutex(MessageQueue* queue);
+void queueLock(MessageQueue* queue);
 
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
+
+/**
+ * @brief Return pointer to the first message 
+ * 
+ * @param queue Queue from which the message will be returned 
+ * @return Message* 
+ */
+Message* queueGetMessage(MessageQueue* queue);
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
+/**
+ * @brief Creates and initializes message and returns pointer to it
+ * 
+ * @param buffer Contents of buffer that will be copied into message
+ * @param msgFlags Flags that will be set
+ * @return Message* Pointer to new allocated message
+ */
+Message* createMessage(Buffer* buffer, msg_flags msgFlags);
 
 /**
  * @brief Adds new message to the queue at the end
@@ -104,20 +116,10 @@ void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags);
  */
 void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags);
 
-/**
- * @brief Adds new message to the queue at the start
- * 
- * @warning This function doesn't use mutexes and is not reentrant,
- * so prevention of data corruption is on programmer
- * 
- * @param queue MessageQueue to which will the new message be added
- * @param buffer is and input buffer from which the new message will be created
- */
-void queueAddMessagePriorityNoMutex(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags);
-
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
+
 
 /**
  * @brief Deletes first message and moves queue forward
@@ -125,16 +127,6 @@ void queueAddMessagePriorityNoMutex(MessageQueue* queue, Buffer* buffer, msg_fla
  * @param queue Queue from which will be the message deleted
  */
 void queuePopMessage(MessageQueue* queue);
-
-/**
- * @brief Deletes first message and moves queue forward
- * 
- * @warning This function doesn't use mutexes and is not reentrant,
- * so prevention of data corruption is on programmer
- * 
- * @param queue Queue from which will be the message deleted
- */
-void queuePopMessageNoMutex(MessageQueue* queue);
 
 // ----------------------------------------------------------------------------
 //
@@ -157,10 +149,6 @@ bool queueIsEmpty(MessageQueue* queue);
  */
 size_t queueLength(MessageQueue* queue);
 
-// ----------------------------------------------------------------------------
-//
-// ----------------------------------------------------------------------------
-
 /**
  * @brief Adds ONE to sended counter of first message 
  * 
@@ -169,37 +157,26 @@ size_t queueLength(MessageQueue* queue);
 void queueMessageSended(MessageQueue* queue);
 
 /**
- * @brief Adds ONE to sended counter of first message 
- * 
- * @warning This function doesn't use mutexes and is not reentrant,
- * so prevention of data corruption is on programmer
- * 
- * @param queue queue to which first message counter will be incremented
- */
-void queueMessageSendedNoMutex(MessageQueue* queue);
-
-// ----------------------------------------------------------------------------
-//
-// ----------------------------------------------------------------------------
-
-/**
- * @brief Returns number of times this message was sended 
+ * @brief Returns number of times this message was sended
  * 
  * @param queue queue from which first message will be checked
  * @return u_int8_t number of times first message in queue was sended 
  */
 u_int8_t queueGetSendedCounter(MessageQueue* queue);
 
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
 /**
- * @brief Returns number of times this message was sended
+ * @brief Sets message id of the first message based on program 
+ * interface message counter
  * 
- * @warning This function doesn't use mutexes and is not reentrant,
- * so prevention of data corruption is on programmer
- * 
- * @param queue queue from which first message will be checked
- * @return u_int8_t number of times first message in queue was sended 
+ * @param queue Pointer to queue
+ * @param progInt Pointer to ProgramInterface based that holds correct message
+ * counter
  */
-u_int8_t queueGetSendedCounterNoMutex(MessageQueue* queue);
+void queueSetMsgID(MessageQueue* queue, ProgramInterface* progInt);
 
 // ----------------------------------------------------------------------------
 //
@@ -212,60 +189,5 @@ u_int8_t queueGetSendedCounterNoMutex(MessageQueue* queue);
  * @return msg_flags flags to be returned
  */
 msg_flags queueGetMessageFlags(MessageQueue* queue);
-
-/**
- * @brief Returns value of first message flags
- * 
- * @warning This function doesn't use mutexes and is not reentrant,
- * so prevention of data corruption is on programmer
- * 
- * @param queue Queue from which the first message's flags will be returned 
- * @return msg_flags flags to be returned
- */
-msg_flags queueGetMessageFlagsNoMutex(MessageQueue* queue);
-
-// ----------------------------------------------------------------------------
-//
-// ----------------------------------------------------------------------------
-
-/**
- * @brief Unlock queue mutex
- * 
- * @warning DO NOT USE! if you haven't read documentation.
- * 
- * @param queue Queue to be unlocked
- */
-void queueUnlock(MessageQueue* queue);
-
-/**
- * @brief Lock queue mutex
- * @warning DO NOT USE! if you haven't read documentation.
- * 
- * @param queue Queue to be unlocked
- */
-void queueLock(MessageQueue* queue);
-
-/**
- * @brief Sets message id of the first message based on program 
- * interface message counter
- * 
- * @param queue Pointer to queue
- * @param progInt Pointer to ProgramInterface based that holds correct message
- * counter
- */
-void queueSetMsgID(MessageQueue* queue, ProgramInterface* progInt);
-
-/**
- * @brief Sets message id of the first message based on program 
- * interface message counter
- * 
-* @warning This function doesn't use mutexes and is not reentrant,
- * so prevention of data corruption is on programmer
- * 
- * @param queue Pointer to queue
- * @param progInt Pointer to ProgramInterface based that holds correct message
- * counter
- */
-void queueSetMsgIDNoMutex(MessageQueue* queue, ProgramInterface* progInt);
 
 #endif
