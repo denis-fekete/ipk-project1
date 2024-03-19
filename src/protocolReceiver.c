@@ -66,10 +66,14 @@ void* protocolReceiver(void *vargp)
     // Set up epoll to react to the opened socket
     // ------------------------------------------------------------------------
 
+    
+
     struct timeval tv;
+    tv.tv_usec = 0;
     tv.tv_sec = 1;
 
-    // TODO: check if necessary
+    // set timeout for recvfrom in case that program ended and no 
+    // more messages will be sent 
     if(setsockopt(progInt->netConfig->openedSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv)))
     {
         errHandling("setsockopt() failed\n", 1); //TODO:
@@ -125,8 +129,7 @@ void* protocolReceiver(void *vargp)
 
                         pthread_cond_signal(progInt->threads->rec2SenderCond);
                         debugPrint(stdout, "DEBUG: Msg sended by sender was "
-                            "confirmed, id: %i\n", 
-                            queueTopMsgID);
+                            "confirmed, id: %i\n", queueTopMsgID);
 
                         // if auth has been sended, and waiting to be confirmed 
                         if(getProgramState(progInt) == fsm_AUTH_SENDED)
@@ -211,7 +214,9 @@ void* protocolReceiver(void *vargp)
         #endif
     }
 
-    free(serverResponse.data);
+    bufferDestory(&serverResponse);
+    bufferDestory(&sendConfirm);
+
     debugPrint(stdout, "DEBUG: Receiver ended\n");
 
     return NULL;

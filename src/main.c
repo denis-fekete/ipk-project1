@@ -244,7 +244,7 @@ int main(int argc, char* argv[])
     progInterface.comDetails = &comDetails;
 
     // ------------------------------------------------------------------------
-    // Process arguments from user
+    // Process CLI arguments from user
     // ------------------------------------------------------------------------
 
     #ifdef DEBUG
@@ -269,6 +269,7 @@ int main(int argc, char* argv[])
     #ifndef DEBUG
         if(clientCommands.data == NULL) { errHandling("Server address is (-s address) is mandatory", 1); /*TODO:*/ }
     #endif
+
     // ------------------------------------------------------------------------
     // Get server information and create socket
     // ------------------------------------------------------------------------
@@ -341,8 +342,7 @@ int main(int argc, char* argv[])
         {
         case fres_SKIP: continue; break;
         case fres_SEND: break;
-        default:
-            break;
+        default: break;
         }
 
         // Assembles array of bytes into Buffer protocolMsg, returns if 
@@ -351,19 +351,13 @@ int main(int argc, char* argv[])
 
         if(canBeSended)
         {
-            // // add message to the queue
-            // queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags);
-            // comDetails.msgCounter += 1;
-
-            // if sendingQueue is empty, sender is asleep waiting
-            // wake it up
-            if(queueIsEmpty(progInt->threads->sendingQueue))
-            {
-                pthread_cond_signal(&senderEmptyQueueCond);
-            }
-            // TODO: swap with above
             // add message to the queue
+            queueLock(&sendingQueue);
             queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags);
+            queueUnlock(&sendingQueue);
+
+            // signal sender if he is waiting because queue is empty
+            pthread_cond_signal(&senderEmptyQueueCond);
         }
         
         // Exit loop if /exit detected 
@@ -378,15 +372,14 @@ int main(int argc, char* argv[])
         }
     }
 
-    debugPrint(stdout, "DEBUG: Communicaton ended with %u messages\n", comDetails.msgCounter);
+    debugPrint(stdout, "DEBUG: Communicaton ended with %u messages\n", (comDetails.msgCounter - 1));
+
     // ------------------------------------------------------------------------
     // Closing up communication
     // ------------------------------------------------------------------------
 
     pthread_join(protReceiver, NULL);
     pthread_join(protSender, NULL);
-
-    debugPrint(stdout, "Main ended\n");
 
     shutdown(progInt->netConfig->openedSocket, SHUT_RDWR);
     free(comDetails.displayName.data);

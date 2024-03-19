@@ -118,6 +118,7 @@ Message* createMessage(Buffer* buffer, msg_flags msgFlags)
     bufferCopy(tmpBuffer, buffer);
 
     tmpMsg->sendCount = 0;
+    tmpMsg->confirmed = false;
     tmpMsg->buffer = tmpBuffer;
     tmpMsg->msgFlags = msgFlags;
 

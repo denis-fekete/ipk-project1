@@ -107,7 +107,7 @@ void* protocolSender(void* vargp)
             {
                 // ping main to stop waiting if waiting
                 pthread_cond_signal(progInt->threads->mainCond);
-                
+
                 queueUnlock(sendingQueue);
                 // use pthread wait for main thread to ping that queue is not 
                 // empty or timeout to expire

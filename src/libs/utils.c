@@ -119,17 +119,19 @@ int isEndingCharacter(char input)
 
 void stringReplace(char* dst, char* src, size_t len)
 {
-    if(dst == NULL || src == NULL || len == 0)
+    if(dst != NULL && src != NULL)
     {
-        #ifdef DEBUG
-        fprintf(stderr, "Error: stringReplace() received bad pointer or invalid length (dst:%p, src:%p, len:%ld\n", dst, src, len);
-        #endif
+        for(size_t i = 0; i < len; i++)
+        {
+            dst[i] = src[i];
+        }
+        return;
     }
 
-    for(size_t i = 0; i < len; i++)
-    {
-        dst[i] = src[i];
-    }
+    #ifdef DEBUG
+        fprintf(stderr, "Error: stringReplace() received bad pointer or "
+        "invalid length (dst:%p, src:%p, len:%ld\n", dst, src, len);
+    #endif
 }
 
 // ----------------------------------------------------------------------------
