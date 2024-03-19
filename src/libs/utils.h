@@ -29,9 +29,11 @@ typedef enum FSM {
     fsm_AUTH_SENDED, /*authetication was successfully sended*/
     fsm_W8_4_REPLY, /*auth has been confirmed, waiting for reply*/
     fsm_OPEN, /*authetication was confirmed and replied to*/
+    fsm_EMPTY_Q_BYE, /*send all messages left in queue and then end*/
+    fsm_BYE_RECV, /*bye was received, prepare to end program*/
     fsm_ERR, 
-    fsm_BYE,
-    fms_END} fsm_t;
+    fsm_END
+    } fsm_t;
 
 typedef enum CommandType {cmd_AUTH, cmd_JOIN, cmd_RENAME, cmd_HELP, cmd_CONF, cmd_MSG, cmd_EXIT, cmd_NONE} cmd_t;
 
@@ -88,6 +90,9 @@ typedef struct ThreadCommunication {
 
     pthread_cond_t* rec2SenderCond; // signaling sender thread from receiver thread
     pthread_mutex_t* rec2SenderMutex; // signaling sender thread from receiver thread
+
+    pthread_cond_t* mainCond; // signaling sender thread from receiver thread
+    pthread_mutex_t* mainMutex; // signaling sender thread from receiver thread
 } ThreadCommunication;
 
 typedef struct ProgramInterface {

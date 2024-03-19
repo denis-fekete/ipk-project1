@@ -214,6 +214,11 @@ int main(int argc, char* argv[])
     pthread_mutex_t rec2SenderMutex;
     pthread_mutex_init(&rec2SenderMutex, NULL);
 
+    pthread_cond_t mainCond;
+    pthread_cond_init(&mainCond, NULL);
+    pthread_mutex_t mainMutex;
+    pthread_mutex_init(&mainMutex, NULL);
+
     pthread_mutex_t stdoutMutex;
     pthread_mutex_init(&stdoutMutex, NULL);
 
@@ -228,6 +233,9 @@ int main(int argc, char* argv[])
 
     progInt->threads->rec2SenderCond = &rec2SenderCond;
     progInt->threads->rec2SenderMutex = &rec2SenderMutex;
+
+    progInt->threads->mainCond = &mainCond;
+    progInt->threads->mainMutex = &mainMutex;
 
     NetworkConfig netConfig;
     progInterface.netConfig = &netConfig;
@@ -312,7 +320,8 @@ int main(int argc, char* argv[])
     // ------------------------------------------------------------------------
 
     // continue while continueProgram is true, only main id can go into this loop
-    while (progInt->threads->continueProgram)
+    // while (progInt->threads->continueProgram)
+    while (getProgramState(progInt) != fsm_END)
     {
         // --------------------------------------------------------------------
         // Convert user input into an protocol
@@ -327,6 +336,7 @@ int main(int argc, char* argv[])
 
         msg_flags flags = msg_flag_MSG;
         filter_res_t result =  filterCommandsByFSM(cmdType, progInt, commands, &flags);
+
         switch (result)
         {
         case fres_SKIP: continue; break;
@@ -359,15 +369,12 @@ int main(int argc, char* argv[])
         // Exit loop if /exit detected 
         if(cmdType == cmd_EXIT)
         {
-            // sleep(2);
-            // pthread_cond_signal(&senderEmptyQueueCond);
-            while(!queueIsEmpty(&sendingQueue))
-            {
-                sleep(2);
-                pthread_cond_signal(&senderEmptyQueueCond);
-            }
+            // wait for sender to ping that it is empty
+            pthread_cond_wait(&mainCond, &mainMutex);
+            // set state to empty queue, send bye and exit
+            setProgramState(progInt, fsm_EMPTY_Q_BYE);
             // wake up sender to exit
-            progInt->threads->continueProgram = false;
+            pthread_cond_signal(&senderEmptyQueueCond);
         }
     }
 
@@ -379,6 +386,8 @@ int main(int argc, char* argv[])
     pthread_join(protReceiver, NULL);
     pthread_join(protSender, NULL);
 
+    debugPrint(stdout, "Main ended\n");
+
     shutdown(progInt->netConfig->openedSocket, SHUT_RDWR);
     free(comDetails.displayName.data);
     free(comDetails.channelID.data);
@@ -386,6 +395,14 @@ int main(int argc, char* argv[])
     free(protocolMsg.data);
     queueDestroy(progInt->threads->sendingQueue);
     queueDestroy(progInt->threads->receivedQueue);
+
+    pthread_mutex_destroy(&rec2SenderMutex);
+    pthread_cond_destroy(&rec2SenderCond);
+    pthread_mutex_destroy(&senderEmptyQueueMutex);
+    pthread_cond_destroy(&senderEmptyQueueCond);
+    pthread_mutex_destroy(&mainMutex);
+    pthread_cond_destroy(&mainCond);
+
     pthread_mutex_destroy(&stdoutMutex);
     pthread_mutex_destroy(&fsmMutex);
 

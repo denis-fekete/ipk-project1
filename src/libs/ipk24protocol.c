@@ -82,15 +82,15 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Progra
     case cmd_MSG: buffer->data[0] = msg_MSG; break;
     case cmd_CONF: 
         buffer->data[0] = msg_CONF;
-        buffer->data[1] = *(commands[0].start);
-        buffer->data[2] = *(commands[1].start);
+        // buffer->data[1] = commands[0].start[0];
+        // buffer->data[2] = commands[1].start[1];
         buffer->used = 3;
         return true;
         break;
     case cmd_EXIT: 
         buffer->data[0] = (unsigned char) msg_BYE;
-        buffer->data[1] = high;
-        buffer->data[2] = low;
+        // buffer->data[1] = high;
+        // buffer->data[2] = low;
         buffer->used = 3;
         return true; 
         break;
@@ -99,9 +99,9 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Progra
     ptrPos += 1;
 
     // MessageID
-    buffer->data[1] = high;  
+    // buffer->data[1] = high;  
     ptrPos += 1;
-    buffer->data[2] = low;  
+    // buffer->data[2] = low;  
     ptrPos += 1;
 
     // ------------------------------------------------------------------------

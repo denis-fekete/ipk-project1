@@ -34,22 +34,6 @@ void assembleConfirmProtocol(Buffer* recvBuffer, Buffer* confirmBuffer, ProgramI
     }
 }
 
-
-// use macro for loop overhead because it would be too much tabulators
-#define LOOP_WITH_EPOLL_START \
-    do { \
-        epoll_ctl(epollFd, EPOLL_CTL_ADD, progInt->netConfig->openedSocket, &event);    \
-        int readySockets = epoll_wait(epollFd, events, MAX_EVENTS, 1);      \
-        if(readySockets){ } /*TODO: delete*/                                \
-        for(unsigned i = 0; i < MAX_EVENTS; i++) {                          \
-            if (events[i].events & EPOLLIN) {
-
-#define LOOP_WITH_EPOLL_END \
-            } \
-        } \
-    } while (progInt->threads->continueProgram);
-
-
 /**
  * @brief 
  * 
@@ -82,17 +66,10 @@ void* protocolReceiver(void *vargp)
     // Set up epoll to react to the opened socket
     // ------------------------------------------------------------------------
 
-    // TODO: DELETE
-    // #define MAX_EVENTS 3
-    // struct epoll_event event;
-    // struct epoll_event events[MAX_EVENTS];
-    // int epollFd = epoll_create1(0);
-    // event.events = EPOLLIN; //want to read
-    // event.data.fd = progInt->netConfig->openedSocket;
-
     struct timeval tv;
     tv.tv_sec = 1;
 
+    // TODO: check if necessary
     if(setsockopt(progInt->netConfig->openedSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv)))
     {
         errHandling("setsockopt() failed\n", 1); //TODO:
@@ -102,9 +79,7 @@ void* protocolReceiver(void *vargp)
     // Set up variables for receiving messages
     // ------------------------------------------------------------------------
 
-     // TODO: DELETE
-    // LOOP_WITH_EPOLL_START 
-    do
+    while(getProgramState(progInt) != fsm_END)
     {
         int bytesRx = recvfrom(progInt->netConfig->openedSocket, serverResponse.data,
                                 serverResponse.allocated, flags, 
@@ -156,8 +131,14 @@ void* protocolReceiver(void *vargp)
                         // if auth has been sended, and waiting to be confirmed 
                         if(getProgramState(progInt) == fsm_AUTH_SENDED)
                         {
-                            // change stato to confirmed, and wait for reply
+                            // change state to confirmed, and wait for reply
                             setProgramState(progInt, fsm_W8_4_REPLY);
+                        } 
+                        // received confirmation of bye
+                        else if(getProgramState(progInt) == fsm_BYE_RECV)
+                        {
+                            // change state to end the program
+                            setProgramState(progInt, fsm_END);
                         }
                     }
                 }
@@ -171,6 +152,7 @@ void* protocolReceiver(void *vargp)
                 // if waiting for authetication reply
                 if(getProgramState(progInt) == fsm_W8_4_REPLY)
                 {
+                    // replty to auth is positive
                     if(replyResult == 1)
                     {
                         // assemble confirm protcol
@@ -178,7 +160,9 @@ void* protocolReceiver(void *vargp)
 
                         //check if sender is stuck on empty mutex
                         // add it to queue at start
+                        queueLock(sendingQueue);
                         queueAddMessagePriority(sendingQueue, &sendConfirm, msg_flag_DO_NOT_RESEND);
+                        queueUnlock(sendingQueue);
                         // set state to OPEN
                         setProgramState(progInt, fsm_OPEN);
                         progInt->comDetails->msgCounter = msgID + 1;
@@ -188,11 +172,34 @@ void* protocolReceiver(void *vargp)
                         pthread_cond_signal(progInt->threads->rec2SenderCond);
                         
                     }
-                    else { /*TODO:*/}
+                    else
+                    {
+                        safePrintStdout("System: Wrong username or password\n");
+
+                        // TODO: delete auth from msgQueue
+                        queueLock(sendingQueue);
+                        // check if top of queue is AUTH message, reject it
+                        if(queueGetMessageFlags(sendingQueue) == msg_flag_AUTH)
+                        {
+                            // set flag of auth message to rejected
+                            queueSetMessageFlags(sendingQueue, msg_flag_REJECTED);
+                            // set program state back to start
+                            setProgramState(progInt, fsm_START);
+                        }
+                        // topOfQueue = queueGetMessage(sendingQueue);
+                        queueUnlock(sendingQueue);
+                    }
                 }
                 break;
-            case msg_BYE:
-                setProgramState(progInt, fsm_BYE);
+            case msg_BYE: // BYE was received
+                // assemble confirm protcol for BYE msg
+                assembleConfirmProtocol(&serverResponse, &sendConfirm, progInt);
+                // add it to queue at start
+                queueLock(sendingQueue);
+                queueAddMessagePriority(sendingQueue, &sendConfirm, msg_flag_NONE);
+                queueUnlock(sendingQueue);
+                // set staye to END
+                setProgramState(progInt, fsm_END);
                 break;
             default: break;
         }
@@ -203,12 +210,35 @@ void* protocolReceiver(void *vargp)
             debugPrintSeparator(stdout);
         #endif
     }
-    while(progInt->threads->continueProgram);
-    // TODO: DELETE
-    // LOOP_WITH_EPOLL_END
 
     free(serverResponse.data);
     debugPrint(stdout, "DEBUG: Receiver ended\n");
 
     return NULL;
 }
+
+
+
+    // TODO: DELETE
+    // #define MAX_EVENTS 3
+    // struct epoll_event event;
+    // struct epoll_event events[MAX_EVENTS];
+    // int epollFd = epoll_create1(0);
+    // event.events = EPOLLIN; //want to read
+    // event.data.fd = progInt->netConfig->openedSocket;
+
+/*
+// use macro for loop overhead because it would be too much tabulators
+#define LOOP_WITH_EPOLL_START \
+    do { \
+        epoll_ctl(epollFd, EPOLL_CTL_ADD, progInt->netConfig->openedSocket, &event);    \
+        int readySockets = epoll_wait(epollFd, events, MAX_EVENTS, 1);      \
+        if(readySockets){ }                                                 \
+        for(unsigned i = 0; i < MAX_EVENTS; i++) {                          \
+            if (events[i].events & EPOLLIN) {
+
+#define LOOP_WITH_EPOLL_END \
+            } \
+        } \
+    } while (progInt->threads->continueProgram);
+*/

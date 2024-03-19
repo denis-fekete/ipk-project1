@@ -42,6 +42,13 @@ void filterOutMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
                 safePrintStdout("System: Request timed out. Last message was not sent.\n");   
             }
         }
+        else if(msgToBeSend->msgFlags == msg_flag_REJECTED)
+        {
+            #ifdef DEBUG
+                debugPrint(stdout, "Message got rejected, deleting it\n");
+                bufferPrint(msgToBeSend->buffer, 1);
+            #endif
+        }
         // if message wasnt already confirmed
         else if (msgToBeSend->confirmed == false)
         {
@@ -67,7 +74,7 @@ void* protocolSender(void* vargp)
     struct timespec timeToWait; // time variable for timeout calculation
     struct timeval timeNow; // time variable for timeout calculation
 
-    do 
+    while( getProgramState(progInt) != fsm_END ) 
     {
         // --------------------------------------------------------------------
         // Filter out confirmed messages or messages with too many resends
@@ -88,12 +95,26 @@ void* protocolSender(void* vargp)
         // if queue is empty wait until it is filled
         if(queueIsEmpty(sendingQueue))
         {
-            queueUnlock(sendingQueue);
-            // use pthread wait for main thread to ping that queue is not 
-            // empty or timeout to expire
-            pthread_cond_wait(progInt->threads->senderEmptyQueueCond, 
-                progInt->threads->senderEmptyQueueMutex);
-            continue;
+            // if queue is empty and state is empty queue and bye, end
+            if(getProgramState(progInt) == fsm_EMPTY_Q_BYE)
+            {
+                // bye was sended, end program
+                setProgramState(progInt, fsm_END);
+                queueUnlock(sendingQueue);
+                continue;
+            }
+            else // else wait for someone to ping me
+            {
+                // ping main to stop waiting if waiting
+                pthread_cond_signal(progInt->threads->mainCond);
+                
+                queueUnlock(sendingQueue);
+                // use pthread wait for main thread to ping that queue is not 
+                // empty or timeout to expire
+                pthread_cond_wait(progInt->threads->senderEmptyQueueCond, 
+                    progInt->threads->senderEmptyQueueMutex);
+                continue;
+            }
         }
         
         queueUnlock(sendingQueue);
@@ -110,8 +131,12 @@ void* protocolSender(void* vargp)
         Message* msgToBeSend = queueGetMessage(sendingQueue); 
         
         // if program is not in open state and message to be send is not auth 
-        if(getProgramState(progInt) < fsm_OPEN)
+        switch (getProgramState(progInt))
         {
+        case fsm_START:
+        case fsm_AUTH_W82_BE_SENDED: /*authentication is waiting(W8) to(2) be sended*/
+        case fsm_AUTH_SENDED: /*authetication was successfully sended*/
+        case fsm_W8_4_REPLY: /*auth has been confirmed, waiting for reply*/
             if(queueGetMessageFlags(sendingQueue) != msg_flag_AUTH)
             {
                 queueUnlock(sendingQueue);
@@ -122,7 +147,23 @@ void* protocolSender(void* vargp)
                 queueLock(sendingQueue);
                 msgToBeSend = queueGetMessage(sendingQueue); 
             }
+            break;
+        default:
+            break;
         }
+        // if(getProgramState(progInt) < fsm_OPEN)
+        // {
+        //     f(queueGetMessageFlags(sendingQueue) != msg_flag_AUTH)
+        //     {
+        //         queueUnlock(sendingQueue);
+        //         // wait for receiver to signal that authentication was confirmed
+        //         pthread_cond_wait(progInt->threads->rec2SenderCond, 
+        //             progInt->threads->rec2SenderMutex);
+
+        //         queueLock(sendingQueue);
+        //         msgToBeSend = queueGetMessage(sendingQueue); 
+        //     }
+        // }
 
         // --------------------------------------------------------------------
         // Send message
@@ -199,7 +240,7 @@ void* protocolSender(void* vargp)
         pthread_cond_timedwait(progInt->threads->rec2SenderCond, progInt->threads->rec2SenderMutex, &timeToWait);
 
     // repeat until continueProgram is false and queue is empty
-    } while( progInt->threads->continueProgram || !(queueIsEmpty(sendingQueue)) );
+    }
 
     debugPrint(stdout, "DEBUG: Sender ended\n");
     return NULL;

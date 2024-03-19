@@ -22,7 +22,13 @@
 // Defines, typedefs and structures
 // ----------------------------------------------------------------------------
 
-typedef enum MessageFlags {msg_flag_NONE, msg_flag_DO_NOT_RESEND, msg_flag_AUTH, msg_flag_MSG} msg_flags;
+typedef enum MessageFlags {
+    msg_flag_NONE, 
+    msg_flag_DO_NOT_RESEND, 
+    msg_flag_AUTH, 
+    msg_flag_MSG,
+    msg_flag_REJECTED
+    } msg_flags;
 
 typedef struct Message {
     Buffer* buffer;
@@ -190,4 +196,17 @@ void queueSetMsgID(MessageQueue* queue, ProgramInterface* progInt);
  */
 msg_flags queueGetMessageFlags(MessageQueue* queue);
 
-#endif
+/**
+ * @brief Sets flag of the first message in queue
+ * 
+ * @param queue Queue from which the first message's flags will be changed 
+ * @param newFlag New message of type msg_flags 
+ */
+void queueSetMessageFlags(MessageQueue* queue, msg_flags newFlag);
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
+
+#endif /*MSG_LISH_H*/

@@ -311,5 +311,22 @@ msg_flags queueGetMessageFlags(MessageQueue* queue)
     return queue->first->msgFlags;
 }
 
+/**
+ * @brief Sets flag of the first message in queue
+ * 
+ * @param queue Queue from which the first message's flags will be changed 
+ * @param newFlag New message of type msg_flags 
+ */
+void queueSetMessageFlags(MessageQueue* queue, msg_flags newFlag)
+{
+    if(queue->first != NULL)
+    {
+        queue->first->msgFlags = newFlag;
+        return;
+    }
+
+    errHandling("Unexpected calling of message flags on empty MessageQueue", 1); //TODO: change
+}
+
 #undef THREAD_LOCK
 #undef THREAD_UNLOCK
