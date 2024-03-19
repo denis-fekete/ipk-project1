@@ -14,6 +14,8 @@
 // ----------------------------------------------------------------------------
 
 #define BLOCK_TO_BUFF(dst, src) stringReplace(&(dst), src.start, src.len)
+#define TYPE_PLUS_MSG_ID 3
+#define ZERO_BYTE 1
 
 /**
  * @brief Assembles protocol from commands and command type into a buffer
@@ -28,8 +30,41 @@
  */
 bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, ProgramInterface* progInt)
 {
-    size_t expectedSize = commands[0].len + commands[1].len + commands[2].len + commands[3].len + 10;
+    size_t expectedSize;
+
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+    switch(type)
+    {
+        case cmd_AUTH:
+            expectedSize =  TYPE_PLUS_MSG_ID +
+                commands[0].len + ZERO_BYTE + 
+                progInt->comDetails->displayName.used + ZERO_BYTE +
+                commands[2].len + ZERO_BYTE;
+            break;
+        case cmd_RENAME:
+        case cmd_JOIN:
+            expectedSize = TYPE_PLUS_MSG_ID +
+                progInt->comDetails->channelID.used + ZERO_BYTE +
+                progInt->comDetails->displayName.used + ZERO_BYTE;
+            break;
+        case cmd_MSG:
+            expectedSize = TYPE_PLUS_MSG_ID +
+                progInt->comDetails->displayName.used + ZERO_BYTE +
+                commands[0].len + ZERO_BYTE;
+            break;
+        case cmd_EXIT:
+        case cmd_CONF:
+            expectedSize = TYPE_PLUS_MSG_ID;
+            break;
+        default: 
+        printf("%i\n", type);
+        errHandling("Unexpected command type in assembleProtocol()\n", 1);
+    }
+    #pragma GCC diagnostic pop
+
     bufferResize(buffer, expectedSize);
+    // bufferResize(buffer, 1500);
 
     size_t ptrPos = 0;
 
@@ -303,7 +338,7 @@ cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4], bool* eofDetected)
 
     BytesBlock first = {NULL, 0}, second = {NULL, 0}, third = {NULL, 0};
 
-    cmd_t type;
+    cmd_t type = cmd_NONE;
 
     if(*eofDetected)
     {
@@ -336,6 +371,9 @@ cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4], bool* eofDetected)
     }
     else
     {
+        cmd.len = 0;
+        cmd.start = NULL;
+
         first.start = buffer->data;
         first.len = buffer->used; 
         type = cmd_MSG;

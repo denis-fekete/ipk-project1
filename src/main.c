@@ -34,7 +34,7 @@
 
 //Allow change of executable name in Makefile using -D{EXECUTABLE_NAME}
 #ifndef EXECUTABLE_NAME
-    #define EXECUTABLE_NAME "ipk24-chat"
+    #define EXECUTABLE_NAME "ipk24chat"
 #endif
 
 /**
@@ -241,8 +241,6 @@ int main(int argc, char* argv[])
 
     #ifdef DEBUG
         char defaultHostname[] = "127.0.0.1"; /*"anton5.fit.vutbr.cz"*/
-    #else
-        char* defaultHostname = NULL;
     #endif
 
     // Use buffer for storing ip address, 
@@ -274,9 +272,7 @@ int main(int argc, char* argv[])
         char* serverHostname = (clientCommands.data != NULL)? clientCommands.data : defaultHostname;
         struct sockaddr_in address = findServer(serverHostname, progInt->netConfig->portNumber);
     #else
-        char* serverHostname = (clientCommands.data != NULL)? clientCommands.data : defaultHostname;
-        struct sockaddr_in address = findServer(serverHostname, progInt->netConfig->portNumber);
-        // struct sockaddr_in address = findServer(clientCommands.data, progInt->netConfig->portNumber);
+        struct sockaddr_in address = findServer(clientCommands.data, progInt->netConfig->portNumber);
     #endif
 
     // get server address
@@ -367,7 +363,7 @@ int main(int argc, char* argv[])
             // pthread_cond_signal(&senderEmptyQueueCond);
             while(!queueIsEmpty(&sendingQueue))
             {
-                sleep(1);
+                sleep(2);
                 pthread_cond_signal(&senderEmptyQueueCond);
             }
             // wake up sender to exit
