@@ -71,7 +71,7 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Progra
     // Break msgCounter into two bites
     char high;
     char low;
-    breakMsgIdToBytes(&high, &low, progInt->comDetails->msgCounter);
+    breakU16IntToBytes(&high, &low, progInt->comDetails->msgCounter);
 
     // MessageType
     switch (type)
@@ -217,7 +217,7 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Progra
  * @param low Output pointer to unsigned char, lower half of number
  * @param msgCounter Input number to be separated
  */
-void breakMsgIdToBytes(char* high, char* low, uint16_t msgCounter)
+void breakU16IntToBytes(char* high, char* low, uint16_t msgCounter)
 {
     *high = (unsigned char)((msgCounter) >> 8);
     *low = (unsigned char)((msgCounter) & 0xff);
@@ -226,18 +226,13 @@ void breakMsgIdToBytes(char* high, char* low, uint16_t msgCounter)
 /**
  * @brief Converts bwo bytes from input char array into 16bit usigned integer
  * 
- * @param buffer Input char array
+ * @param high Higher byte
+ * @param low Lower byte
  * @return u_int16_t 
  */
-u_int16_t convert2BytesToUInt(char* input)
+u_int16_t convert2BytesToU16Int(char high, char low)
 {
-    // Get msgId
-    unsigned char high = input[1];
-    unsigned char low = input[2];
-
     // Join bytes into one number
-    input[1] = high;  
-    input[2] = low;  
     return (low +  (high << 8)); 
 }
 
@@ -262,7 +257,7 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
     // Get msg type
     u_int8_t msgTypeInt = (u_int8_t) (buffer->data[0]);
     
-    *msgId = convert2BytesToUInt(buffer->data);
+    *msgId = convert2BytesToU16Int(buffer->data[1], buffer->data[2]);
     
     first.start = &(buffer->data[3]);
     // ------------------------------------------------------------------------

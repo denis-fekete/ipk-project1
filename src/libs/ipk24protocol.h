@@ -58,13 +58,14 @@ cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4], bool* eofDetected)
  * @param low Output pointer to unsigned char, lower half of number
  * @param msgCounter Input number to be separated
  */
-void breakMsgIdToBytes(char* high, char* low, uint16_t msgCounter);
+void breakU16IntToBytes(char* high, char* low, uint16_t msgCounter);
 
 /**
  * @brief Converts bwo bytes from input char array into 16bit usigned integer
  * 
- * @param buffer Input char array
+ * @param high Higher byte
+ * @param low Lower byte
  * @return u_int16_t 
  */
-u_int16_t convert2BytesToUInt(char* input);
+u_int16_t convert2BytesToU16Int(char high, char low);
 #endif

@@ -9,6 +9,9 @@
 
 #include "msgQueue.h"
 
+#define HIGHER_MSGID_BYTE_POSTION 1
+#define LOWER_MSGID_BYTE_POSTION 2
+
 /**
  * @brief Initializes MessageQueue with default size (DEFAULT_MESSAGE_QUEUE_SIZE)
  * 
@@ -173,6 +176,48 @@ void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgF
     queue->len += 1;
 }
 
+/**
+ * @brief Adds message to queue at the start. Added emssage won't contain buffer, only
+ * message ID
+ * 
+ * @param queue Pointer to the queue 
+ * @param buffer Buffer where message is stored
+ */
+void queueAddMessageOnlyID(MessageQueue* queue, Buffer* buffer)
+{
+    Message* tmpMsg = (Message*) malloc(sizeof(Message));
+
+    if(tmpMsg == NULL)
+    {
+        errHandling("Malloc failed in queueAddMessageOnlyID() for Message", 1); /* TODO: change err code */
+    }
+
+    tmpMsg->buffer = NULL;
+    tmpMsg->msgFlags = msg_flag_ERR;
+
+    if(buffer->used < 3) 
+    { 
+        errHandling("Buffer provided in queueAddMessageOnlyID"
+        "is shorter than 3 bytes!", 1); /*TODO: change*/ 
+    }
+    
+    tmpMsg->highMsgId = buffer->data[HIGHER_MSGID_BYTE_POSTION];
+    tmpMsg->lowMsgId = buffer->data[LOWER_MSGID_BYTE_POSTION];
+
+    // if queue doesn't have last, set this msg as last
+    if(queue->last == NULL) { queue->last = tmpMsg; }
+
+    Message* oldFirst = queue->first;
+
+    // set new message as first
+    queue->first = tmpMsg;
+
+    tmpMsg->behindMe = oldFirst;
+    
+    // increase queue size
+    queue->len += 1;
+}
+
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
@@ -247,6 +292,38 @@ size_t queueLength(MessageQueue* queue)
     return currValue;
 }
 
+/**
+ * @brief Looks for message ID in queue, works only with message queues
+ *  without buffers containing only msg ids
+ * 
+ * @param queue Pointer to the queue
+ * @param highB Higer byte to compare to
+ * @param lowB Lower byte to compare to
+ * @return true Message with this ID was found
+ * @return false Message with this ID was not found
+ */
+bool queueContainsMessageId(MessageQueue* queue, char highB, char lowB)
+{
+    if(queue == NULL) { return false; }
+
+    Message* msg = queue->first;
+    while(msg != NULL)
+    {
+        if(highB == msg->highMsgId)
+        {
+            if(lowB == msg->lowMsgId) { return true; }
+        }
+
+        msg = msg->behindMe;
+    }
+    
+    return false;
+}
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
 
 /**
  * @brief Adds ONE to sended counter of first message 
@@ -274,8 +351,6 @@ u_int8_t queueGetSendedCounter(MessageQueue* queue)
 //
 // ----------------------------------------------------------------------------
 
-#define HIGHER_BYTE_POSTION 1
-#define LOWER_BYTE_POSTION 2
 /**
  * @brief Sets message id of the first message based on program 
  * interface message counter
@@ -284,18 +359,34 @@ u_int8_t queueGetSendedCounter(MessageQueue* queue)
  * @param progInt Pointer to ProgramInterface based that holds correct message
  * counter
  */
-void queueSetMsgID(MessageQueue* queue, ProgramInterface* progInt)
+void queueSetMessageID(MessageQueue* queue, ProgramInterface* progInt)
 {
     if(queue->first != NULL)
     {
-        breakMsgIdToBytes(
-            &(queue->first->buffer->data[HIGHER_BYTE_POSTION]),
-            &(queue->first->buffer->data[LOWER_BYTE_POSTION]),
+        // break msgCounter into bytes and store it into buffer at positions
+        breakU16IntToBytes(
+            &(queue->first->buffer->data[HIGHER_MSGID_BYTE_POSTION]),
+            &(queue->first->buffer->data[LOWER_MSGID_BYTE_POSTION]),
             progInt->comDetails->msgCounter);
     }
 }
-#undef HIGHER_BYTE_POSTION
-#undef LOWER_BYTE_POSTION
+
+/**
+ * @brief Returns message ID of the first message from queue
+ * 
+ * @param queue Pointer to queue
+ * @return uint16_t 
+ */
+uint16_t queueGetMessageID(MessageQueue* queue)
+{
+    if(queue->first != NULL)
+    {
+        return convert2BytesToU16Int(queue->first->buffer->data[HIGHER_MSGID_BYTE_POSTION],
+            queue->first->buffer->data[LOWER_MSGID_BYTE_POSTION]);
+    }
+
+    return 0;
+}
 
 // ----------------------------------------------------------------------------
 //
@@ -329,5 +420,5 @@ void queueSetMessageFlags(MessageQueue* queue, msg_flags newFlag)
     errHandling("Unexpected calling of message flags on empty MessageQueue", 1); //TODO: change
 }
 
-#undef THREAD_LOCK
-#undef THREAD_UNLOCK
+#undef HIGHER_BYTE_POSTION
+#undef LOWER_BYTE_POSTION

@@ -27,15 +27,28 @@ typedef enum MessageFlags {
     msg_flag_DO_NOT_RESEND, 
     msg_flag_AUTH, 
     msg_flag_MSG,
-    msg_flag_REJECTED
+    msg_flag_REJECTED, /*auth was rejected*/
+    msg_flag_CONFIRMED, /*auth was confirmed*/
+    msg_flag_ERR
     } msg_flags;
 
 typedef struct Message {
     Buffer* buffer;
     struct Message* behindMe;
-    u_int8_t sendCount;
+    
+    union 
+    {
+        u_int8_t sendCount;
+        unsigned char highMsgId; 
+    };
+    union 
+    {
+        bool confirmed;
+        unsigned char lowMsgId;
+    };
+    
+    
     msg_flags msgFlags;
-    bool confirmed;
 } Message;
 
 typedef struct MessageQueue {
@@ -122,6 +135,16 @@ void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags);
  */
 void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags);
 
+
+/**
+ * @brief Adds message to queue at the start. Added emssage won't contain buffer, only
+ * message ID
+ * 
+ * @param queue Pointer to the queue 
+ * @param buffer Buffer where message is stored
+ */
+void queueAddMessageOnlyID(MessageQueue* queue, Buffer* buffer);
+
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
@@ -156,6 +179,18 @@ bool queueIsEmpty(MessageQueue* queue);
 size_t queueLength(MessageQueue* queue);
 
 /**
+ * @brief Looks for message ID in queue, works only with message queues
+ *  without buffers containing only msg ids
+ * 
+ * @param queue Pointer to the queue
+ * @param highB Higer byte to compare to
+ * @param lowB Lower byte to compare to
+ * @return true Message with this ID was found
+ * @return false Message with this ID was not found
+ */
+bool queueContainsMessageId(MessageQueue* queue, char highB, char lowB);
+
+/**
  * @brief Adds ONE to sended counter of first message 
  * 
  * @param queue queue to which first message counter will be incremented
@@ -182,7 +217,15 @@ u_int8_t queueGetSendedCounter(MessageQueue* queue);
  * @param progInt Pointer to ProgramInterface based that holds correct message
  * counter
  */
-void queueSetMsgID(MessageQueue* queue, ProgramInterface* progInt);
+void queueSetMessageID(MessageQueue* queue, ProgramInterface* progInt);
+
+/**
+ * @brief Returns message ID of the first message from queue
+ * 
+ * @param queue Pointer to queue
+ * @return uint16_t 
+ */
+uint16_t queueGetMessageID(MessageQueue* queue);
 
 // ----------------------------------------------------------------------------
 //

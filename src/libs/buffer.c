@@ -24,6 +24,7 @@ void bufferInit(Buffer* buffer)
     buffer->used = 0;
 }
 
+
 /**
  * @brief Resizes buffer to new size, if buffer is not
  * iniatilized (NULL) default value (INITIAL_BUFFER_SIZE) will

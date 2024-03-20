@@ -38,6 +38,7 @@ void filterOutMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
             
             if(flags == msg_flag_AUTH && getProgramState(progInt) == fsm_AUTH_SENDED) {
                 safePrintStdout("System: Authetication message request timed out. Please try again.\n");
+                setProgramState(progInt, fsm_START);
             } else {
                 safePrintStdout("System: Request timed out. Last message was not sent.\n");   
             }
@@ -48,6 +49,11 @@ void filterOutMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
                 debugPrint(stdout, "Message got rejected, deleting it\n");
                 bufferPrint(msgToBeSend->buffer, 1);
             #endif
+        }
+        // do not throw away auth messages even if they are confirmed
+        else if(msgToBeSend->msgFlags == msg_flag_AUTH)
+        {
+            break;
         }
         // if message wasnt already confirmed
         else if (msgToBeSend->confirmed == false)
@@ -117,8 +123,8 @@ void* protocolSender(void* vargp)
             }
         }
         
-        queueUnlock(sendingQueue);
         // make room for someone who is waiting
+        queueUnlock(sendingQueue);
 
         // --------------------------------------------------------------------
         // If in state before OPEN, do not send messages
@@ -130,14 +136,16 @@ void* protocolSender(void* vargp)
         // for receiver importing priority messages like CONFIRM
         Message* msgToBeSend = queueGetMessage(sendingQueue); 
         
-        // if program is not in open state and message to be send is not auth 
+        msg_flags currFlag;
         switch (getProgramState(progInt))
         {
         case fsm_START:
         case fsm_AUTH_W82_BE_SENDED: /*authentication is waiting(W8) to(2) be sended*/
         case fsm_AUTH_SENDED: /*authetication was successfully sended*/
         case fsm_W8_4_REPLY: /*auth has been confirmed, waiting for reply*/
-            if(queueGetMessageFlags(sendingQueue) != msg_flag_AUTH)
+            // if program is not in open state and message to be send is not auth 
+            currFlag = queueGetMessageFlags(sendingQueue);
+            if(currFlag != msg_flag_AUTH)
             {
                 queueUnlock(sendingQueue);
                 // wait for receiver to signal that authentication was confirmed
@@ -145,32 +153,30 @@ void* protocolSender(void* vargp)
                     progInt->threads->rec2SenderMutex);
 
                 queueLock(sendingQueue);
-                msgToBeSend = queueGetMessage(sendingQueue); 
             }
+            // if message is AUTH and was already confirmed, ...
+            // wait to prevent repetitive auth sending 
+            else if(currFlag == msg_flag_AUTH && msgToBeSend->confirmed)
+            {
+                queueUnlock(sendingQueue);
+                // message was confirmed, wait for receiver to ping me   
+                pthread_cond_wait(progInt->threads->rec2SenderCond, 
+                    progInt->threads->rec2SenderMutex);
+                queueLock(sendingQueue);
+            }
+            msgToBeSend = queueGetMessage(sendingQueue); 
             break;
+        case fsm_OPEN:
         default:
             break;
         }
-        // if(getProgramState(progInt) < fsm_OPEN)
-        // {
-        //     f(queueGetMessageFlags(sendingQueue) != msg_flag_AUTH)
-        //     {
-        //         queueUnlock(sendingQueue);
-        //         // wait for receiver to signal that authentication was confirmed
-        //         pthread_cond_wait(progInt->threads->rec2SenderCond, 
-        //             progInt->threads->rec2SenderMutex);
-
-        //         queueLock(sendingQueue);
-        //         msgToBeSend = queueGetMessage(sendingQueue); 
-        //     }
-        // }
 
         // --------------------------------------------------------------------
         // Send message
         // --------------------------------------------------------------------
 
         // set correct message id right before sending it
-        queueSetMsgID(sendingQueue, progInt);
+        queueSetMessageID(sendingQueue, progInt);
 
         #ifdef DEBUG
             debugPrint(stdout, "DEBUG: Sender (queue len: %li", sendingQueue->len);
