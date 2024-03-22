@@ -11,6 +11,7 @@
 
 #define HIGHER_MSGID_BYTE_POSTION 1
 #define LOWER_MSGID_BYTE_POSTION 2
+#define CMD_BYTE_POSITION 0
 
 /**
  * @brief Initializes MessageQueue with default size (DEFAULT_MESSAGE_QUEUE_SIZE)
@@ -33,14 +34,7 @@ void queueInit(MessageQueue* queue)
  */
 void queueDestroy(MessageQueue* queue)
 {
-    while(queue->len > 0)
-    {
-        queuePopMessage(queue);
-    }
-
-    queue->first = NULL;
-    queue->last = NULL;
-    queue->last = 0;
+    queuePopAllMessages(queue);
 
     pthread_mutex_destroy(&(queue->lock));
 }
@@ -249,6 +243,23 @@ void queuePopMessage(MessageQueue* queue)
     queue->len -= 1;
 }
 
+/**
+ * @brief Deletes all messages in queue
+ * 
+ * @param queue Queue from which will the messages be deleted
+ */
+void queuePopAllMessages(MessageQueue* queue)
+{
+    while(queue->len > 0)
+    {
+        queuePopMessage(queue);
+    }
+
+    queue->first = NULL;
+    queue->last = NULL;
+    queue->last = 0;
+}
+
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
@@ -420,5 +431,22 @@ void queueSetMessageFlags(MessageQueue* queue, msg_flags newFlag)
     errHandling("Unexpected calling of message flags on empty MessageQueue", 1); //TODO: change
 }
 
-#undef HIGHER_BYTE_POSTION
-#undef LOWER_BYTE_POSTION
+/**
+ * @brief Returns MessageType (msg_t) of the first message in queue
+ * 
+ * @param queue Pointer to the queue
+ * @return cmd_t Detected value
+ */
+msg_t queueGetMessageMsgType(MessageQueue* queue)
+{
+    return ( (enum MessageType) queue->first->buffer->data[CMD_BYTE_POSITION] );
+}
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
+
+#undef HIGHER_BYTE_POSITION
+#undef LOWER_BYTE_POSITION
+#undef CMD_BYTE_POSITION

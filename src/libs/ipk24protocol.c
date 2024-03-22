@@ -26,14 +26,12 @@
  * that don't have all informations provided by user at start
  * @param progInt Pointer to ProgramInterface
  * 
- * @return Returns true if buffer can be trasmitted to the server
+ * @return Returns true if buffer can be sended to the server
  */
 bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, ProgramInterface* progInt)
 {
     size_t expectedSize;
 
-    // #pragma GCC diagnostic push
-    // #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
     switch(type)
     {
         case cmd_AUTH:
@@ -42,7 +40,7 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Progra
                 commands[3].len + ZERO_BYTE +
                 commands[2].len + ZERO_BYTE;
             break;
-        case cmd_RENAME:
+        case cmd_RENAME: return false; break;
         case cmd_JOIN:
             expectedSize = TYPE_PLUS_MSG_ID +
                 progInt->comDetails->channelID.used + ZERO_BYTE +
@@ -61,7 +59,6 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Progra
         printf("%i\n", type);
         errHandling("Unexpected command type in assembleProtocol()\n", 1);
     }
-    // #pragma GCC diagnostic pop
 
     bufferResize(buffer, expectedSize);
     // bufferResize(buffer, 1500);
@@ -78,7 +75,7 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Progra
     {
     case cmd_AUTH: buffer->data[0] = msg_AUTH; break;
     case cmd_JOIN: buffer->data[0] = msg_JOIN; break;
-    case cmd_RENAME: buffer->data[0] = msg_JOIN; break;
+    // case cmd_RENAME: buffer->data[0] = msg_JOIN; break; // TODO:delete?
     case cmd_MSG: buffer->data[0] = msg_MSG; break;
     case cmd_CONF: 
         buffer->data[0] = msg_CONF;
@@ -117,7 +114,7 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Progra
         buffer->data[ptrPos] = 0;
         ptrPos += 1;
     }
-    else if(type == cmd_RENAME)
+    /*else if(type == cmd_RENAME)
     {
         if(progInt->comDetails->channelID.data == NULL)
         { 
@@ -131,7 +128,7 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Progra
         // 0 byte
         buffer->data[ptrPos] = 0;
         ptrPos += 1;
-    }
+    }*/
     else if(type == cmd_MSG)
     {
         if(progInt->comDetails->displayName.data == NULL)
@@ -139,7 +136,6 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Progra
             safePrintStdout("System: ChannelID not provided, cannot rename! (Did you use /auth before this commands?). Use /help for help.\n");
             return false;
         }
-        // Rename: ChannelID
         stringReplace(&( buffer->data[ptrPos] ), progInt->comDetails->displayName.data,
             progInt->comDetails->displayName.used);
         ptrPos += progInt->comDetails->displayName.used;
@@ -255,14 +251,14 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
     BytesBlock first = {NULL, 0}, second = {NULL, 0}, third = {NULL, 0};
 
     // Get msg type
-    u_int8_t msgTypeInt = (u_int8_t) (buffer->data[0]);
+    *msgType = (enum MessageType) buffer->data[0];
     
     *msgId = convert2BytesToU16Int(buffer->data[1], buffer->data[2]);
     
     first.start = &(buffer->data[3]);
     // ------------------------------------------------------------------------
 
-    switch (msgTypeInt)
+    switch (*msgType)
     {
     case msg_CONF: break; // No addtional bytes needed
     case msg_REPLY:
@@ -310,7 +306,6 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
         break;
     }
 
-    *msgType = (enum MessageType) msgTypeInt;
     commands[0] = first;
     commands[1] = second;
     commands[2] = third;
@@ -332,9 +327,11 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
  * 
  * @param buffer Input buffer containing command from user (client)
  * @param commands Array of commands where separated commands will be store 
- * @return Returns type of recognized command (enum CommandType)
+ * @param eofDetected Signals that end of file was detected
+ * @param flags Flags that will be set to message
+ * @return cmd_t Returns command type
  */
-cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4], bool* eofDetected)
+cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4], bool* eofDetected, msg_flags* flags)
 {
     // If buffer is not filled skip
     if(buffer->used <= 0) { return cmd_NONE; }
@@ -356,6 +353,7 @@ cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4], bool* eofDetected)
         getWord(&second, &(first.start[first.len]), buffer->used - (cmd.len + first.len));
         getWord(&third, &(second.start[second.len]), buffer->used - (cmd.len + first.len + second.len));
         type = cmd_AUTH;
+        *flags = msg_flag_AUTH;
     }
     else if(strncmp(cmd.start, "/join", cmd.len) == 0)
     {

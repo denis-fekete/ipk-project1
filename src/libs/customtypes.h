@@ -37,6 +37,17 @@ typedef enum CommandType cmd_t;
 typedef enum Protocols prot_t;
 typedef enum MessageType msg_t;
 
+typedef enum MessageFlags {
+    msg_flag_NONE, 
+    msg_flag_DO_NOT_RESEND, 
+    msg_flag_AUTH, 
+    msg_flag_REJECTED, /*auth was rejected*/
+    msg_flag_CONFIRMED, /*auth was confirmed*/
+    msg_flag_ERR
+    } msg_flags;
+
+
 #include "msgQueue.h"
+
 
 #endif

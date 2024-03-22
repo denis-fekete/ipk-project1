@@ -18,8 +18,8 @@
 #include "libs/buffer.h"
 #include "libs/utils.h"
 #include "libs/networkCom.h"
-#include "libs/ipk24protocol.h"
 #include "libs/msgQueue.h"
+#include "libs/ipk24protocol.h"
 
 #include "protocolReceiver.h"
 #include "protocolSender.h"
@@ -133,45 +133,49 @@ void storeInformation(cmd_t cmdType, BytesBlock commands[4], CommunicationDetail
     }
 }
 
-typedef enum FilterResult {fres_ERR, fres_SKIP, fres_STORE, fres_SEND} filter_res_t;
 
-filter_res_t filterCommandsByFSM(cmd_t cmdType, ProgramInterface* progInt, BytesBlock commands[4], msg_flags* flags)
+/**
+ * @brief Filters commands by CommandType (cmd_t) and returns 
+ * if they should be sended
+ * 
+ * @param cmdType Detected command type 
+ * @param progInt Pointer to the ProgramInterface
+ * @param commands Detected commands
+ * @param flags Flags to be set to the message
+ * @return true Message can be sended
+ * @return false Message cannot be sended
+ */
+bool filterCommandsByFSM(cmd_t cmdType, ProgramInterface* progInt, msg_flags* flags)
 {
     // if buffer is empty ... newline was entered
-    if(cmdType == cmd_NONE) return fres_SKIP;
+    if(cmdType == cmd_NONE) return false;
 
-    switch (getProgramState(progInt))
+    switch (cmdType)
     {
-    case fsm_START:
-        // --------------------------------------------------------------------
-        switch (cmdType)
+    case cmd_AUTH:
+        if( getProgramState(progInt) == fsm_START )
         {
-        case cmd_AUTH:
-            storeInformation(cmdType, commands, progInt->comDetails);
             *flags = msg_flag_AUTH;
             setProgramState(progInt, fsm_AUTH_W82_BE_SENDED);
-            return fres_SEND;
-        case cmd_HELP:
-            printUserHelpMenu(progInt);
-            return fres_SKIP;
-        case cmd_RENAME:
-            storeInformation(cmdType, commands, progInt->comDetails);
-            return fres_SKIP;
-        default:
+            return true;
+        }
+        break;
+    case cmd_HELP:
+        printUserHelpMenu(progInt);
+        return false;
+    default:
+        if( getProgramState(progInt) != fsm_OPEN)
+        {
             safePrintStdout("System: You are not connected to server! "
                 "Use /auth to connect to server or /help for more information.\n"); 
-            return fres_SKIP;
-            break;
+            return false;
         }
-        // --------------------------------------------------------------------
-    default:
-        storeInformation(cmdType, commands, progInt->comDetails);
-        return fres_SEND;
+        return true;
         break;
     }
 
     // should this message be not send?
-    return fres_ERR;
+    return true;
 }
 // ----------------------------------------------------------------------------
 //
@@ -247,10 +251,6 @@ int main(int argc, char* argv[])
     // Process CLI arguments from user
     // ------------------------------------------------------------------------
 
-    #ifdef DEBUG
-        char defaultHostname[] = "127.0.0.1"; /*"anton5.fit.vutbr.cz"*/
-    #endif
-
     // Use buffer for storing ip address, 
     // then used for storing client input / commanads
     Buffer clientCommands; // 
@@ -266,9 +266,10 @@ int main(int argc, char* argv[])
     { 
         errHandling("Argument protocol (-t udp / tcp) is mandatory!", 1); /*TODO:*/
     }
-    #ifndef DEBUG
-        if(clientCommands.data == NULL) { errHandling("Server address is (-s address) is mandatory", 1); /*TODO:*/ }
-    #endif
+    if(clientCommands.data == NULL)
+    {
+        errHandling("Server address is (-s address) is mandatory", 1); /*TODO:*/ 
+    }
 
     // ------------------------------------------------------------------------
     // Get server information and create socket
@@ -277,12 +278,7 @@ int main(int argc, char* argv[])
     // open socket for comunication on client side (this)
     progInterface.netConfig->openedSocket = getSocket(progInt->netConfig->protocol);
     
-    #ifdef DEBUG
-        char* serverHostname = (clientCommands.data != NULL)? clientCommands.data : defaultHostname;
-        struct sockaddr_in address = findServer(serverHostname, progInt->netConfig->portNumber);
-    #else
-        struct sockaddr_in address = findServer(clientCommands.data, progInt->netConfig->portNumber);
-    #endif
+    struct sockaddr_in address = findServer(clientCommands.data, progInt->netConfig->portNumber);
 
     // get server address
     progInt->netConfig->serverAddress = (struct sockaddr*) &address;
@@ -333,18 +329,16 @@ int main(int argc, char* argv[])
         clientCommands.used = loadBufferFromStdin(&clientCommands, &eofDetected);
         // Separate clientCommands buffer into commands (ByteBlocks),
         // store recognized command
-        cmdType = userInputToCmds(&clientCommands, commands, &eofDetected);
+        msg_flags flags = msg_flag_NONE;
+        cmdType = userInputToCmds(&clientCommands, commands, &eofDetected, &flags);
 
-        msg_flags flags = msg_flag_MSG;
-        filter_res_t result =  filterCommandsByFSM(cmdType, progInt, commands, &flags);
-
-        switch (result)
-        {
-        case fres_SKIP: continue; break;
-        case fres_SEND: break;
-        default: break;
-        }
-
+        // Filter commands by type and FSM state
+        canBeSended = filterCommandsByFSM(cmdType, progInt, &flags);
+        // if message should not be send skip it
+        if(!canBeSended) { continue; }
+        // update stored information about communication 
+        storeInformation(cmdType, commands, progInt->comDetails);
+        
         // Assembles array of bytes into Buffer protocolMsg, returns if 
         // message can be trasmitted
         canBeSended = assembleProtocol(cmdType, commands, &protocolMsg, progInt);
@@ -353,11 +347,18 @@ int main(int argc, char* argv[])
         {
             // add message to the queue
             queueLock(&sendingQueue);
-            queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags);
-            queueUnlock(&sendingQueue);
 
+            bool signalSender = false;
+            if(queueIsEmpty(&sendingQueue)) { signalSender = true; }
+            
+            queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags);
+            
             // signal sender if he is waiting because queue is empty
-            pthread_cond_signal(&senderEmptyQueueCond);
+            if(signalSender)
+            {
+                pthread_cond_signal(&senderEmptyQueueCond);
+            }
+            queueUnlock(&sendingQueue);
         }
         
         // Exit loop if /exit detected 

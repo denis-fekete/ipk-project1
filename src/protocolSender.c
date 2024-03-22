@@ -18,6 +18,61 @@
     timeToWait.tv_nsec %= (1000 * 1000 * 1000);
 
 /**
+ * @brief Filters messages to by send by currecnt state of program and by
+ * MessageType. 
+ * 
+ * @param progInt Pointer to the ProgramInterface 
+ */
+void filterMessagesByFSM(ProgramInterface* progInt)
+{
+    MessageQueue* sendingQueue = progInt->threads->sendingQueue;
+
+    // get msg again in case someone changed first it ... this is primary 
+    // for receiver importing priority messages like CONFIRM
+    Message* msgToBeSend = queueGetMessage(sendingQueue); 
+    msg_t msgType = queueGetMessageMsgType(sendingQueue);
+
+    switch (getProgramState(progInt))
+    {
+    case fsm_START:
+    case fsm_AUTH_W82_BE_SENDED: /*authentication is waiting(W8) to(2) be sended*/
+    case fsm_AUTH_SENDED: /*authetication was successfully sended*/
+    case fsm_W8_4_REPLY: /*auth has been confirmed, waiting for reply*/
+        // if program is not in open state and message to be send is not auth 
+        if(msgType != msg_AUTH)
+        {
+            queueUnlock(sendingQueue);
+            // wait for receiver to signal that authentication was confirmed
+            pthread_cond_wait(progInt->threads->rec2SenderCond, 
+                progInt->threads->rec2SenderMutex);
+
+            queueLock(sendingQueue);
+        }
+        // if message is AUTH and was already confirmed, ...
+        // wait to prevent repetitive auth sending 
+        else if(msgType == msg_AUTH && msgToBeSend->confirmed)
+        {
+            queueUnlock(sendingQueue);
+            // message was confirmed, wait for receiver to ping me   
+            pthread_cond_wait(progInt->threads->rec2SenderCond, 
+                progInt->threads->rec2SenderMutex);
+            queueLock(sendingQueue);
+        }
+        break;
+    // ------------------------------------------------------------------------
+    case fsm_OPEN:
+        if(msgType == msg_AUTH)
+        {
+            safePrintStdout("System: You are already autheticated, message will be ignored.");
+            queuePopMessage(sendingQueue);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+/**
  * @brief Filters out messages from provided queue that were sent
  *  more than specified times in NetworkConfiguration or that are
  * already confirmed
@@ -25,7 +80,7 @@
  * @param sendingQueue Pointer to queue from which should messages be filtered 
  * @param progInt Pointer to ProgramInterface
  */
-void filterOutMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
+void filterResentMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
 {
     Message* msgToBeSend = queueGetMessage(sendingQueue);
     while(msgToBeSend != NULL)
@@ -88,7 +143,7 @@ void* protocolSender(void* vargp)
      
         queueLock(sendingQueue);
 
-        filterOutMessages(sendingQueue, progInt);
+        filterResentMessages(sendingQueue, progInt);
 
         // make room for someone who is waiting
         queueUnlock(sendingQueue);
@@ -127,49 +182,14 @@ void* protocolSender(void* vargp)
         queueUnlock(sendingQueue);
 
         // --------------------------------------------------------------------
-        // If in state before OPEN, do not send messages
+        // Filter messages by current state of program
         // --------------------------------------------------------------------
 
         queueLock(sendingQueue);
 
-        // get msg again in case someone changed first it ... this is primary 
-        // for receiver importing priority messages like CONFIRM
-        Message* msgToBeSend = queueGetMessage(sendingQueue); 
-        
-        msg_flags currFlag;
-        switch (getProgramState(progInt))
-        {
-        case fsm_START:
-        case fsm_AUTH_W82_BE_SENDED: /*authentication is waiting(W8) to(2) be sended*/
-        case fsm_AUTH_SENDED: /*authetication was successfully sended*/
-        case fsm_W8_4_REPLY: /*auth has been confirmed, waiting for reply*/
-            // if program is not in open state and message to be send is not auth 
-            currFlag = queueGetMessageFlags(sendingQueue);
-            if(currFlag != msg_flag_AUTH)
-            {
-                queueUnlock(sendingQueue);
-                // wait for receiver to signal that authentication was confirmed
-                pthread_cond_wait(progInt->threads->rec2SenderCond, 
-                    progInt->threads->rec2SenderMutex);
+        filterMessagesByFSM(progInt);
 
-                queueLock(sendingQueue);
-            }
-            // if message is AUTH and was already confirmed, ...
-            // wait to prevent repetitive auth sending 
-            else if(currFlag == msg_flag_AUTH && msgToBeSend->confirmed)
-            {
-                queueUnlock(sendingQueue);
-                // message was confirmed, wait for receiver to ping me   
-                pthread_cond_wait(progInt->threads->rec2SenderCond, 
-                    progInt->threads->rec2SenderMutex);
-                queueLock(sendingQueue);
-            }
-            msgToBeSend = queueGetMessage(sendingQueue); 
-            break;
-        case fsm_OPEN:
-        default:
-            break;
-        }
+        Message* msgToBeSend = queueGetMessage(sendingQueue);
 
         // --------------------------------------------------------------------
         // Send message

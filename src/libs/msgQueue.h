@@ -22,16 +22,6 @@
 // Defines, typedefs and structures
 // ----------------------------------------------------------------------------
 
-typedef enum MessageFlags {
-    msg_flag_NONE, 
-    msg_flag_DO_NOT_RESEND, 
-    msg_flag_AUTH, 
-    msg_flag_MSG,
-    msg_flag_REJECTED, /*auth was rejected*/
-    msg_flag_CONFIRMED, /*auth was confirmed*/
-    msg_flag_ERR
-    } msg_flags;
-
 typedef struct Message {
     Buffer* buffer;
     struct Message* behindMe;
@@ -157,6 +147,13 @@ void queueAddMessageOnlyID(MessageQueue* queue, Buffer* buffer);
  */
 void queuePopMessage(MessageQueue* queue);
 
+/**
+ * @brief Deletes all messages in queue
+ * 
+ * @param queue Queue from which will the messages be deleted
+ */
+void queuePopAllMessages(MessageQueue* queue);
+
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
@@ -246,6 +243,14 @@ msg_flags queueGetMessageFlags(MessageQueue* queue);
  * @param newFlag New message of type msg_flags 
  */
 void queueSetMessageFlags(MessageQueue* queue, msg_flags newFlag);
+
+/**
+ * @brief Returns MessageType (msg_t) of the first message in queue
+ * 
+ * @param queue Pointer to the queue
+ * @return msg_t Detected value
+ */
+msg_t queueGetMessageMsgType(MessageQueue* queue);
 
 // ----------------------------------------------------------------------------
 //

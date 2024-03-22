@@ -38,6 +38,8 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Progra
  */
 void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, u_int16_t* msgId);
 
+#include "msgQueue.h"
+
 /**
  * @brief Takes input from user (client) from buffer and break it into an
  * array of commands (ByteBlock)
@@ -47,10 +49,11 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
  * 
  * @param buffer Input buffer containing command from user (client)
  * @param commands Array of commands where separated commands will be store 
- * @return Returns type of recognized command (enum CommandType)
+ * @param eofDetected Signals that end of file was detected
+ * @param flags Flags that will be set to message
+ * @return cmd_t Returns command type
  */
-cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4], bool* eofDetected);
-
+cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4], bool* eofDetected, msg_flags* flags);
 /**
  * @brief Converts 16bit message id into an two unsinged chars
  * 
