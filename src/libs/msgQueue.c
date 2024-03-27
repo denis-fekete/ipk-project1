@@ -9,8 +9,8 @@
 
 #include "msgQueue.h"
 
-#define HIGHER_MSGID_BYTE_POSTION 1
-#define LOWER_MSGID_BYTE_POSTION 2
+#define HIGHER_MSGID_BYTE_POSTION 2
+#define LOWER_MSGID_BYTE_POSTION 1
 #define CMD_BYTE_POSITION 0
 
 /**
@@ -372,7 +372,8 @@ u_int8_t queueGetSendedCounter(MessageQueue* queue)
  */
 void queueSetMessageID(MessageQueue* queue, ProgramInterface* progInt)
 {
-    if(queue->first != NULL)
+    // check if first exists and if message is not confirm
+    if(queue->first != NULL && queue->first->msgFlags != msg_flag_CONFIRM)
     {
         // break msgCounter into bytes and store it into buffer at positions
         breakU16IntToBytes(
@@ -392,8 +393,8 @@ uint16_t queueGetMessageID(MessageQueue* queue)
 {
     if(queue->first != NULL)
     {
-        return convert2BytesToU16Int(queue->first->buffer->data[HIGHER_MSGID_BYTE_POSTION],
-            queue->first->buffer->data[LOWER_MSGID_BYTE_POSTION]);
+        return convert2BytesToU16Int(queue->first->buffer->data[LOWER_MSGID_BYTE_POSTION],
+            queue->first->buffer->data[HIGHER_MSGID_BYTE_POSTION]);
     }
 
     return 0;

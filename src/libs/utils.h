@@ -46,8 +46,11 @@ typedef enum MessageType {
     msg_JOIN = 0x03,
     msg_MSG = 0x04,
     msg_ERR = 0xFE,
-    msg_BYE = 0xFF
+    msg_BYE = 0xFF,
+    msg_UNKNOWN = 0xAA
   } msg_t;
+
+
 
 // ----------------------------------------------------------------------------
 //  Structures
@@ -72,6 +75,8 @@ typedef struct CommunicationDetails {
     Buffer channelID;
     u_int16_t msgCounter;
 } CommunicationDetails;
+
+
 
 
 typedef struct ThreadCommunication {

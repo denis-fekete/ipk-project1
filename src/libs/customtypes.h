@@ -43,7 +43,8 @@ typedef enum MessageFlags {
     msg_flag_AUTH, 
     msg_flag_REJECTED, /*auth was rejected*/
     msg_flag_CONFIRMED, /*auth was confirmed*/
-    msg_flag_ERR
+    msg_flag_ERR,
+    msg_flag_CONFIRM /*if message is confirm*/
     } msg_flags;
 
 

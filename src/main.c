@@ -181,9 +181,6 @@ bool filterCommandsByFSM(cmd_t cmdType, ProgramInterface* progInt, msg_flags* fl
 //
 // ----------------------------------------------------------------------------
 
-//DEBUG:
-#define CMD_EXIT_SKIP_START if(cmdType != CMD_EXIT) {
-#define CMD_EXIT_SKIP_END }
 
 int main(int argc, char* argv[])
 {
@@ -316,20 +313,23 @@ int main(int argc, char* argv[])
     // Loop of communication
     // ------------------------------------------------------------------------
 
+    bool canBeSended;
+    bool eofDetected = false;
+    msg_flags flags = msg_flag_NONE;
+    ProtocolBlocks pBlocks;
     // continue while continueProgram is true, only main id can go into this loop
-    // while (progInt->threads->continueProgram)
     while (getProgramState(progInt) != fsm_END)
     {
         // --------------------------------------------------------------------
         // Convert user input into an protocol
         // --------------------------------------------------------------------
-        bool canBeSended;
-        bool eofDetected = false;
+        canBeSended = false;
+        eofDetected = false;
         // Load buffer from stdin, store length of buffer
         clientCommands.used = loadBufferFromStdin(&clientCommands, &eofDetected);
         // Separate clientCommands buffer into commands (ByteBlocks),
         // store recognized command
-        msg_flags flags = msg_flag_NONE;
+        flags = msg_flag_NONE;
         cmdType = userInputToCmds(&clientCommands, commands, &eofDetected, &flags);
 
         // Filter commands by type and FSM state
@@ -364,8 +364,6 @@ int main(int argc, char* argv[])
         // Exit loop if /exit detected 
         if(cmdType == cmd_EXIT)
         {
-            // wait for sender to ping that it is empty
-            pthread_cond_wait(&mainCond, &mainMutex);
             // set state to empty queue, send bye and exit
             setProgramState(progInt, fsm_EMPTY_Q_BYE);
             // wake up sender to exit

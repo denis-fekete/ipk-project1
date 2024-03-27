@@ -140,7 +140,7 @@ void* protocolSender(void* vargp)
         // --------------------------------------------------------------------
         // Filter out confirmed messages or messages with too many resends
         // --------------------------------------------------------------------
-     
+        debugPrint(stdout, "DEBUG: Sender at start of the loop\n");
         queueLock(sendingQueue);
 
         filterResentMessages(sendingQueue, progInt);
@@ -172,6 +172,7 @@ void* protocolSender(void* vargp)
                 queueUnlock(sendingQueue);
                 // use pthread wait for main thread to ping that queue is not 
                 // empty or timeout to expire
+                debugPrint(stdout, "DEBUG: Sender waiting\n");
                 pthread_cond_wait(progInt->threads->senderEmptyQueueCond, 
                     progInt->threads->senderEmptyQueueMutex);
                 continue;
@@ -225,7 +226,7 @@ void* protocolSender(void* vargp)
 
 
         // if DO_NOT_RESEND flags is set, delete msg from queue right away
-        if(sendedMessageFlags == msg_flag_DO_NOT_RESEND)
+        if(sendedMessageFlags == msg_flag_DO_NOT_RESEND || sendedMessageFlags == msg_flag_CONFIRM)
         {
             queuePopMessage(sendingQueue);
         }

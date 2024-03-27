@@ -8,8 +8,15 @@ CC = gcc
 CVERSTION = -std=c17
 LDFLAGS := -lm -lpcap -lnet
 
-# CFLAGS = $(CVERSTION) -pthread -pedantic-errors -Wall -Wextra -Werror -g -I$(LIB_DIR)
-CFLAGS = $(CVERSTION) -pthread -pedantic-errors -Wall -Wextra -Werror -g -DDEBUG -I$(LIB_DIR)
+# Default flags for debug build
+DEBUG_CFLAGS = -pthread -pedantic-errors -Wall -Wextra -Werror -g -DDEBUG
+RELEASE_CFLAGS = -pthread -pedantic-errors -Wall -Wextra -Werror
+
+ifeq ($(BUILD_TYPE),debug)
+	CFLAGS = $(CVERSTION) $(DEBUG_CFLAGS) -I$(LIB_DIR)
+else
+	CFLAGS = $(CVERSTION) $(RELEASE_CFLAGS) -I$(LIB_DIR)
+endif
 
 SRCS := $(wildcard $(SRC_DIR)/*.c)
 LIB_SRCS := $(wildcard $(LIB_DIR)/*.c)
@@ -28,7 +35,6 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 $(OBJ_DIR)/libs/%.o: $(LIB_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
-
 
 .PHONY: clean doc
 

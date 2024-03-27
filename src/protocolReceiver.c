@@ -39,13 +39,12 @@ void sendConfirm(Buffer* serverResponse, Buffer* confirmBuffer, ProgramInterface
     assembleConfirmProtocol(serverResponse, confirmBuffer, progInt);
 
     queueLock(progInt->threads->sendingQueue);
-    queueAddMessagePriority(progInt->threads->sendingQueue, confirmBuffer, msg_flag_DO_NOT_RESEND);
+    queueAddMessagePriority(progInt->threads->sendingQueue, confirmBuffer, msg_flag_CONFIRM);
     queueUnlock(progInt->threads->sendingQueue);
-
 }
 
 void receiverFSM(ProgramInterface* progInt, msg_t msgType, u_int16_t msgID, BytesBlock blocks[4], Buffer* serverResponse,
- MessageQueue* sendingQueue, MessageQueue* confirmedMsgs, Buffer* confirmBuffer)
+    MessageQueue* sendingQueue, MessageQueue* confirmedMsgs, Buffer* confirmBuffer)
 {
     Message* topOfQueue = NULL;
     char replyResult;
@@ -116,11 +115,13 @@ void receiverFSM(ProgramInterface* progInt, msg_t msgType, u_int16_t msgID, Byte
             // if it is repetitive message send confirm and do nothing
             if(repetitiveMsg)
             {
-                sendConfirm(serverResponse, confirmBuffer, progInt);
-                return;
+                // sendConfirm(serverResponse, confirmBuffer, progInt);
+                debugPrint(stdout, "Repetetive reply received\n");
+                // return;
             }
 
             replyResult = serverResponse->data[3];
+            debugPrint(stdout, "DEBUG: Reply message resuted in: %i\n", replyResult);
 
             // if waiting for authetication reply
             if(getProgramState(progInt) == fsm_W8_4_REPLY)
@@ -171,8 +172,20 @@ void receiverFSM(ProgramInterface* progInt, msg_t msgType, u_int16_t msgID, Byte
             // if it is repetitive message send confirm and do nothing
             if(repetitiveMsg)
             {
-                sendConfirm(serverResponse, confirmBuffer, progInt);
-                return;
+                debugPrint(stdout, "Repetetive message received\n");
+                // return;
+            }
+
+            sendConfirm(serverResponse, confirmBuffer, progInt);
+            
+            // ping / signal sender
+            pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
+            pthread_cond_signal(progInt->threads->rec2SenderCond);
+
+
+            if(blocks[0].start != NULL && blocks[1].start != NULL)
+            {
+                safePrintStdout("%s: %s\n", blocks[0].start, blocks[1].start);
             }
             break;
         // --------------------------------------------------------------------
@@ -181,7 +194,14 @@ void receiverFSM(ProgramInterface* progInt, msg_t msgType, u_int16_t msgID, Byte
             sendConfirm(serverResponse, confirmBuffer, progInt);
             // set staye to END
             setProgramState(progInt, fsm_END);
+            safePrintStdout("System: Press ENTER to exit program\n");
             break;
+        case msg_ERR:
+            // send confirm message
+            sendConfirm(serverResponse, confirmBuffer, progInt);
+            // set staye to END
+            setProgramState(progInt, fsm_END);
+            safePrintStdout("ERR FROM %s: %s\n", "0", "0"); // TODO:
         default: 
             break;
     }
@@ -246,11 +266,18 @@ void* protocolReceiver(void *vargp)
                                 &(progInt->netConfig->serverAddressSize));
         // receiver timeout expired
         if(bytesRx <= 0) {continue;}
-        
+
         serverResponse.used = bytesRx; //set buffer length (activly used) bytes
         
+
         disassebleProtocol(&serverResponse, blocks, &msgType, &msgID);
         
+        #ifdef DEBUG
+            debugPrint(stdout, "DEBUG: Received protocol, type: (%i), bytes(%i), contents:\n", msgType, bytesRx);
+            bufferPrint(&serverResponse, 1); // DEBUG:
+            debugPrintSeparator(stdout);
+        #endif
+
         // if in fsm_AUTH state and incoming msg is not REPLY do nothing
         if(getProgramState(progInt) == fsm_START && msgType != msg_REPLY && msgType != msg_CONF)
         {
@@ -259,11 +286,6 @@ void* protocolReceiver(void *vargp)
             continue;
         }
 
-        #ifdef DEBUG
-            debugPrint(stdout, "DEBUG: Received protocol, type: (%i), bytes(%i), contents:\n", msgType, bytesRx);
-            bufferPrint(&serverResponse, 1); // DEBUG:
-            debugPrintSeparator(stdout);
-        #endif
 
         receiverFSM(progInt, msgType, msgID, blocks, &serverResponse, 
             progInt->threads->sendingQueue, &confirmedMsgs, &confirmBuffer);

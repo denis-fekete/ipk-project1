@@ -65,11 +65,6 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Progra
 
     size_t ptrPos = 0;
 
-    // Break msgCounter into two bites
-    char high;
-    char low;
-    breakU16IntToBytes(&high, &low, progInt->comDetails->msgCounter);
-
     // MessageType
     switch (type)
     {
@@ -79,8 +74,8 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Progra
     case cmd_MSG: buffer->data[0] = msg_MSG; break;
     case cmd_CONF: 
         buffer->data[0] = msg_CONF;
-        // buffer->data[1] = commands[0].start[0];
-        // buffer->data[2] = commands[1].start[1];
+        buffer->data[1] = commands[0].start[0];
+        buffer->data[2] = commands[1].start[0];
         buffer->used = 3;
         return true;
         break;
@@ -226,12 +221,32 @@ void breakU16IntToBytes(char* high, char* low, uint16_t msgCounter)
  * @param low Lower byte
  * @return u_int16_t 
  */
-u_int16_t convert2BytesToU16Int(char high, char low)
+u_int16_t convert2BytesToU16Int(char low, char high)
 {
     // Join bytes into one number
     return (low +  (high << 8)); 
 }
 
+/**
+ * @brief Converts integer into and MessageType
+ * 
+ * @param input Input integer
+ * @return msg_t MessageType to be returned
+ */
+msg_t uchar2msgType(unsigned char input)
+{
+    switch (input)
+    {
+    case 0x00: return msg_CONF;
+    case 0x01: return msg_REPLY;
+    case 0x02: return msg_AUTH;
+    case 0x03: return msg_JOIN;
+    case 0x04: return msg_MSG;
+    case 0xFE: return msg_ERR;
+    case 0xFF: return msg_BYE;
+    default: return msg_UNKNOWN;
+    }
+}
 
 #define BBLOCK_END(block) &(block.start[block.len]);
 #define BBLOCK_END_W_ZERO_BYTE(block) &(block.start[block.len + 1]);
@@ -251,7 +266,7 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
     BytesBlock first = {NULL, 0}, second = {NULL, 0}, third = {NULL, 0};
 
     // Get msg type
-    *msgType = (enum MessageType) buffer->data[0];
+    *msgType = uchar2msgType( (unsigned char) buffer->data[0] );
     
     *msgId = convert2BytesToU16Int(buffer->data[1], buffer->data[2]);
     
@@ -301,9 +316,8 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
     // ------------------------------------------------------------------------
     case msg_BYE: break; // No addtional bytes needed
     default:
-        fprintf(stderr, "ERROR: Unknown message type\n");
-        exit(1); 
-        break;
+        debugPrint(stdout, "Unknown message type: %i\n", (int)*msgType);
+        errHandling("ERROR: Protocol disassembler received unknown message type", 1); // TODO:change
     }
 
     commands[0] = first;
