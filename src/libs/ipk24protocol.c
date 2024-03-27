@@ -13,183 +13,118 @@
 //
 // ----------------------------------------------------------------------------
 
-#define BLOCK_TO_BUFF(dst, src) stringReplace(&(dst), src.start, src.len)
-#define TYPE_PLUS_MSG_ID 3
-#define ZERO_BYTE 1
+#define ADD_BLOCK_TO_BUFFER(dst, src)           \
+    stringReplace(&(dst), src.start, src.len);  \
+    ptrPos += src.len;                          \
+    /*add to zero byte*/                        \
+    buffer->data[ptrPos] = 0;                   \
+    ptrPos += 1;
+
+#define ADD_STORED_INFO_TO_BUFFER(dst, src)     \
+    stringReplace(&(dst), src.data, src.used);  \
+    ptrPos += src.used;                         \
+    /*add to zero byte*/                        \
+    buffer->data[ptrPos] = 0;                   \
+    ptrPos += 1;
 
 /**
  * @brief Assembles protocol from commands and command type into a buffer
  * 
- * @param type Recognized type of command user provided
- * @param commands Separated commands from user input
+ * @param pBlocks Separated commands and values from user input
  * @param buffer Output buffer to be trasmited to the server
  * that don't have all informations provided by user at start
  * @param progInt Pointer to ProgramInterface
  * 
  * @return Returns true if buffer can be sended to the server
  */
-bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, ProgramInterface* progInt)
+bool assembleProtocol(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterface* progInt)
 {
-    size_t expectedSize;
-
-    switch(type)
-    {
-        case cmd_AUTH:
-            expectedSize =  TYPE_PLUS_MSG_ID +
-                commands[1].len + ZERO_BYTE + 
-                commands[3].len + ZERO_BYTE +
-                commands[2].len + ZERO_BYTE;
-            break;
-        case cmd_RENAME: return false; break;
-        case cmd_JOIN:
-            expectedSize = TYPE_PLUS_MSG_ID +
-                progInt->comDetails->channelID.used + ZERO_BYTE +
-                progInt->comDetails->displayName.used + ZERO_BYTE;
-            break;
-        case cmd_MSG:
-            expectedSize = TYPE_PLUS_MSG_ID +
-                progInt->comDetails->displayName.used + ZERO_BYTE +
-                commands[1].len + ZERO_BYTE;
-            break;
-        case cmd_EXIT:
-        case cmd_CONF:
-            expectedSize = TYPE_PLUS_MSG_ID;
-            break;
-        default: 
-        printf("%i\n", type);
-        errHandling("Unexpected command type in assembleProtocol()\n", 1);
-    }
-
-    bufferResize(buffer, expectedSize);
-    // bufferResize(buffer, 1500);
-
+    // calculate expected size and resize buffer accordingly, +10 is overhead for zeroing bytes, msgID, type etc...
+    size_t expectedSize = pBlocks->zeroth.len + pBlocks->first.len
+                        + pBlocks->second.len + pBlocks->third.len + 10;
+    
+    // position counter in buffer
     size_t ptrPos = 0;
 
-    // MessageType
+    // resize buffer to needed size
+    bufferResize(buffer, expectedSize);
+
+    cmd_t type = uchar2CommandType(pBlocks->type);
+    // Set correct message type to buffer, also filter commands that shouldn't be send
     switch (type)
     {
     case cmd_AUTH: buffer->data[0] = msg_AUTH; break;
-    case cmd_JOIN: buffer->data[0] = msg_JOIN; break;
-    // case cmd_RENAME: buffer->data[0] = msg_JOIN; break; // TODO:delete?
-    case cmd_MSG: buffer->data[0] = msg_MSG; break;
+    case cmd_JOIN: buffer->data[0] = msg_JOIN; 
+        // add to expected size
+        expectedSize += progInt->comDetails->channelID.used;
+        break;
+    case cmd_MSG: buffer->data[0] = msg_MSG; 
+        // add to expected size
+        expectedSize += progInt->comDetails->displayName.used;
+        break;
     case cmd_CONF: 
         buffer->data[0] = msg_CONF;
-        buffer->data[1] = commands[0].start[0];
-        buffer->data[2] = commands[1].start[0];
+        buffer->data[1] = pBlocks->cmd_conf_lowMsgID.start[0];
+        buffer->data[2] = pBlocks->cmd_conf_highMsgID.start[0];
         buffer->used = 3;
-        return true;
+        return true; // message can be send to server
         break;
     case cmd_EXIT: 
         buffer->data[0] = (unsigned char) msg_BYE;
-        // buffer->data[1] = high;
-        // buffer->data[2] = low;
         buffer->used = 3;
-        return true; 
+        return true; // message can be send to server
         break;
     default: errHandling("Unknown command type in assembleProtocol() function", 1) /*TODO: change error code*/; break;
     }
+
+    // resize buffer to needed size, again because of join/msg
+    bufferResize(buffer, expectedSize);
+
     ptrPos += 1;
 
-    // MessageID
+    // Move position by number of MessageID bytes, dont set them, sender does it
     // buffer->data[1] = high;  
     ptrPos += 1;
     // buffer->data[2] = low;  
     ptrPos += 1;
 
-    // ------------------------------------------------------------------------
-    // First block
-    // ------------------------------------------------------------------------
-
-    if(type == cmd_AUTH || type == cmd_JOIN)
+    switch (type)
     {
-        // Join: ChannelID  / Auth: Username
-        BLOCK_TO_BUFF(buffer->data[ptrPos], commands[1]);
-        ptrPos += commands[1].len;
-        // 0 byte
-        buffer->data[ptrPos] = 0;
-        ptrPos += 1;
-    }
-    /*else if(type == cmd_RENAME)
-    {
-        if(progInt->comDetails->channelID.data == NULL)
-        { 
-            safePrintStdout("System: ChannelID not provided, cannot rename! (Did you use /auth before this commands?). Use /help for help.\n");
-            return false;
-        }
-        // Rename: ChannelID
-        stringReplace(&( buffer->data[ptrPos] ), progInt->comDetails->channelID.data,
-                progInt->comDetails->channelID.used);
-        ptrPos += progInt->comDetails->channelID.used;
-        // 0 byte
-        buffer->data[ptrPos] = 0;
-        ptrPos += 1;
-    }*/
-    else if(type == cmd_MSG)
-    {
-        if(progInt->comDetails->displayName.data == NULL)
-        { 
-            safePrintStdout("System: ChannelID not provided, cannot rename! (Did you use /auth before this commands?). Use /help for help.\n");
-            return false;
-        }
-        stringReplace(&( buffer->data[ptrPos] ), progInt->comDetails->displayName.data,
-            progInt->comDetails->displayName.used);
-        ptrPos += progInt->comDetails->displayName.used;
-        // 0 byte
-        buffer->data[ptrPos] = 0;
-        ptrPos += 1;
-    }
-
-    // ------------------------------------------------------------------------
-    // Second block
-    // ------------------------------------------------------------------------
-
-    if(type == cmd_AUTH || type == cmd_MSG) // Msg: MessageContents / Auth: DisplayName
-    {
-        if(type == cmd_AUTH)
-        {
-            BLOCK_TO_BUFF(buffer->data[ptrPos], commands[3]);
-            ptrPos += commands[3].len;
-        }
-        else
-        {
-            BLOCK_TO_BUFF(buffer->data[ptrPos], commands[1]);
-            ptrPos += commands[1].len;
-        }
-        // 0 byte
-        buffer->data[ptrPos] = 0;
-        ptrPos += 1;
-    } 
-    else if (type == cmd_JOIN || type == cmd_RENAME) // Join: DisplayName
-    {
+    case cmd_AUTH:
+        ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_auth_username);
+        ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_auth_displayname);
+        ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_auth_secret);
+        break;
+    case cmd_JOIN:
+        ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_join_channelID);
+        // check if displayname is stored
         if(progInt->comDetails->displayName.data == NULL)
         { 
             safePrintStdout("Displayname not provided, cannot join! Use /help for help.");
-            return false;
+            return false; // message cannot be sent
         }
-
-        stringReplace(&( buffer->data[ptrPos] ), progInt->comDetails->displayName.data,
-            progInt->comDetails->displayName.used);
+        
+        ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->displayName);
+        break;
+    case cmd_MSG:
+        // check if displayname is stored
+        if(progInt->comDetails->displayName.data == NULL)
+            { 
+                safePrintStdout("System: ChannelID not provided, cannot rename!"
+                    "(Did you use /auth before this commands?). Use /help for help.\n");
+                return false;
+            }
+        stringReplace(&(buffer->data[ptrPos]), progInt->comDetails->displayName.data, progInt->comDetails->displayName.used);
         ptrPos += progInt->comDetails->displayName.used;
-        // 0 byte
         buffer->data[ptrPos] = 0;
         ptrPos += 1;
+        // ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->displayName);
+        ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_msg_MsgContents);
+        break;
+    default:
+        errHandling("Unknown CommandType in assembleProtocol()\n", 1); // TODO:
+        break;
     }
-
-    // ------------------------------------------------------------------------
-    // Third block
-    // ------------------------------------------------------------------------
-
-
-    if(type == cmd_AUTH)
-    {
-        // Auth: Secret
-        BLOCK_TO_BUFF(buffer->data[ptrPos], commands[2]);
-        ptrPos += commands[2].len;
-        // 0 byte
-        buffer->data[ptrPos] = 0;
-        ptrPos += 1;
-    }
-    // ------------------------------------------------------------------------
 
     buffer->used = ptrPos;
 
@@ -201,52 +136,6 @@ bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, Progra
 //
 // ----------------------------------------------------------------------------
 
-/**
- * @brief Converts 16bit message id into an two unsinged chars
- * 
- * @param high Output pointer to unsigned char, upper/higher half of number
- * @param low Output pointer to unsigned char, lower half of number
- * @param msgCounter Input number to be separated
- */
-void breakU16IntToBytes(char* high, char* low, uint16_t msgCounter)
-{
-    *high = (unsigned char)((msgCounter) >> 8);
-    *low = (unsigned char)((msgCounter) & 0xff);
-}
-
-/**
- * @brief Converts bwo bytes from input char array into 16bit usigned integer
- * 
- * @param high Higher byte
- * @param low Lower byte
- * @return u_int16_t 
- */
-u_int16_t convert2BytesToU16Int(char low, char high)
-{
-    // Join bytes into one number
-    return (low +  (high << 8)); 
-}
-
-/**
- * @brief Converts integer into and MessageType
- * 
- * @param input Input integer
- * @return msg_t MessageType to be returned
- */
-msg_t uchar2msgType(unsigned char input)
-{
-    switch (input)
-    {
-    case 0x00: return msg_CONF;
-    case 0x01: return msg_REPLY;
-    case 0x02: return msg_AUTH;
-    case 0x03: return msg_JOIN;
-    case 0x04: return msg_MSG;
-    case 0xFE: return msg_ERR;
-    case 0xFF: return msg_BYE;
-    default: return msg_UNKNOWN;
-    }
-}
 
 #define BBLOCK_END(block) &(block.start[block.len]);
 #define BBLOCK_END_W_ZERO_BYTE(block) &(block.start[block.len + 1]);
@@ -256,73 +145,85 @@ msg_t uchar2msgType(unsigned char input)
  * @brief Dissassembles protocol from Buffer into commands, msgType and msgId
  * 
  * @param buffer Input buffer containing message
- * @param commands Array of BytesBlocks pointing to values
- * @param msgType Detected message type
+ * @param pBlocks Separated commands and values from user input
  * @param msgId Detected message ID 
  */
-void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, u_int16_t* msgId)
+void disassebleProtocol(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* msgId)
 {
     size_t index; // Temporaty helping variable to hold index in string
-    BytesBlock first = {NULL, 0}, second = {NULL, 0}, third = {NULL, 0};
 
     // Get msg type
-    *msgType = uchar2msgType( (unsigned char) buffer->data[0] );
+    pBlocks->type = (unsigned char) buffer->data[0];
     
     *msgId = convert2BytesToU16Int(buffer->data[1], buffer->data[2]);
     
-    first.start = &(buffer->data[3]);
+    // Set values of ProtocolBlocks
+    pBlocks->zeroth.start = &(buffer->data[3]);
+    pBlocks->zeroth.len = 0;
+
+    pBlocks->first.start = NULL; pBlocks->first.len = 0;
+    pBlocks->second.start = NULL; pBlocks->second.len = 0;
+    pBlocks->third.start = NULL; pBlocks->third.len = 0; 
     // ------------------------------------------------------------------------
 
-    switch (*msgType)
+    switch (uchar2msgType(pBlocks->type))
     {
     case msg_CONF: break; // No addtional bytes needed
     case msg_REPLY:
         // Reply: Result (1 byte)
-        first.len = 1;
+        pBlocks->msg_reply_result.start = &(buffer->data[3]);
+        pBlocks->msg_reply_result.len = 1;
+
         // Reply: Ref_MessageID (2 bytes)
-        second.start = BBLOCK_END(first);
-        second.len = 2;
+        pBlocks->msg_reply_refMsgID.start = BBLOCK_END(pBlocks->msg_reply_result);
+        pBlocks->msg_reply_refMsgID.len = 2;
+
         // Reply: MessageContents (x bytes)
-        third.start = BBLOCK_END(second);
-        index = findZeroInString(third.start, buffer->used - (TYPE_ID_LEN + first.len + second.len));
-        third.len = index;
+        pBlocks->msg_reply_MsgContents.start = BBLOCK_END(pBlocks->msg_reply_refMsgID);
+        
+        index = findZeroInString(pBlocks->msg_reply_MsgContents.start, buffer->used - 
+                (TYPE_ID_LEN + pBlocks->msg_reply_result.len + pBlocks->msg_reply_refMsgID.len));
+        pBlocks->msg_reply_MsgContents.len = index;
         break;
     // ------------------------------------------------------------------------
     case msg_AUTH:
         // Auth: Username (x bytes)
-        index = findZeroInString(first.start, buffer->used - (TYPE_ID_LEN));
-        first.len = index;
+        index = findZeroInString(pBlocks->msg_auth_username.start, buffer->used - (TYPE_ID_LEN));
+        pBlocks->msg_auth_username.len = index;
+
         // Auth: Secret (x bytes)
-        second.start = BBLOCK_END_W_ZERO_BYTE(first); // skip one zero byte
-        index = findZeroInString(first.start, buffer->used - (TYPE_ID_LEN + first.len));
-        second.len = index;
+        pBlocks->msg_auth_displayname.start = BBLOCK_END_W_ZERO_BYTE(pBlocks->msg_auth_username); // skip one zero byte
+        index = findZeroInString(pBlocks->msg_auth_displayname.start, buffer->used 
+                - (TYPE_ID_LEN + pBlocks->msg_auth_username.len));
+        pBlocks->msg_auth_displayname.len = index;
+
         // Auth: DisplayName (x bytes)
-        third.start = BBLOCK_END_W_ZERO_BYTE(second); // skip one zero byte
-        index = findZeroInString(first.start, buffer->used - (TYPE_ID_LEN + first.len + second.len));
-        third.len = index;
+        pBlocks->msg_auth_secret.start = BBLOCK_END_W_ZERO_BYTE(pBlocks->msg_auth_displayname); // skip one zero byte
+        index = findZeroInString(pBlocks->msg_auth_secret.start, buffer->used 
+            - (TYPE_ID_LEN + pBlocks->msg_auth_username.len + pBlocks->msg_auth_displayname.len));
+        pBlocks->msg_auth_secret.len = index;
         break;
     // ------------------------------------------------------------------------
-    case msg_JOIN:
     case msg_MSG:
-    case msg_ERR:
+    case msg_JOIN:
+    case msg_ERR: // ERR, JOIN and MSG have same order
         // MSG, ERR: DisplayName (x bytes) / cmd_JOIN: ChannelID (x bytes) 
-        index = findZeroInString(first.start, buffer->used - (TYPE_ID_LEN));
-        first.len = index;
+        index = findZeroInString(pBlocks->zeroth.start, buffer->used - (TYPE_ID_LEN));
+        pBlocks->zeroth.len = index;
+
         // MSG, ERR: MessageContents (x bytes) / cmd_JOIN: DisplayName (x bytes) 
-        second.start = BBLOCK_END_W_ZERO_BYTE(first) // skip one zero byte
-        index = findZeroInString(first.start, buffer->used - (TYPE_ID_LEN + first.len));
-        second.len = index;
+        pBlocks->first.start = BBLOCK_END_W_ZERO_BYTE(pBlocks->zeroth) // skip one zero byte
+        index = findZeroInString(pBlocks->first.start, buffer->used 
+            - (TYPE_ID_LEN + pBlocks->zeroth.len));
+
+        pBlocks->first.len = index;
         break;
     // ------------------------------------------------------------------------
     case msg_BYE: break; // No addtional bytes needed
     default:
-        debugPrint(stdout, "Unknown message type: %i\n", (int)*msgType);
+        debugPrint(stdout, "Unknown message type: %i\n", (int)pBlocks->type);
         errHandling("ERROR: Protocol disassembler received unknown message type", 1); // TODO:change
     }
-
-    commands[0] = first;
-    commands[1] = second;
-    commands[2] = third;
 }
 #undef BBLOCK_END
 #undef BBLOCK_END_W_ZERO_BYTE
@@ -333,6 +234,20 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
 // ----------------------------------------------------------------------------
 
 /**
+ * @brief Wrapper around getWord(), if not enough arguments given
+ * change this into an plain message. 
+ * 
+ * This is instead of GOTO
+ */
+#define TRY_GET_WORD(cond) if (!(cond)) {               \
+    pBlocks->cmd_msg_MsgContents.start = buffer->data;  \
+    pBlocks->cmd_msg_MsgContents.len = buffer->used;    \
+    pBlocks->type = cmd_MSG;                            \
+    return;                                             \
+    }
+
+
+/**
  * @brief Takes input from user (client) from buffer and break it into an
  * array of commands (ByteBlock)
  * 
@@ -340,67 +255,90 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
  * will lead to unexpected behavior commands in commands
  * 
  * @param buffer Input buffer containing command from user (client)
- * @param commands Array of commands where separated commands will be store 
+ * @param pBlocks Structure that holds user input separated into commands 
  * @param eofDetected Signals that end of file was detected
  * @param flags Flags that will be set to message
  * @return cmd_t Returns command type
+ * // TODO: rewrite
  */
-cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4], bool* eofDetected, msg_flags* flags)
+void userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, bool* eofDetected, msg_flags* flags)
 {
     // If buffer is not filled skip
-    if(buffer->used <= 0) { return cmd_NONE; }
+    if(buffer->used <= 0) { pBlocks->type = cmd_NONE; return; }
 
     size_t index = findBlankCharInString(buffer->data, buffer->used);
+    // get command into ProtocolBlocks
     BytesBlock cmd = {.start=buffer->data, .len=index};
+    pBlocks->cmd_command = cmd;
 
+    // reset byteblocks
     BytesBlock first = {NULL, 0}, second = {NULL, 0}, third = {NULL, 0};
+    pBlocks->first = first;
+    pBlocks->second = second;
+    pBlocks->third = third;
 
-    cmd_t type = cmd_NONE;
+    int tmp = -1;
 
     if(*eofDetected)
     {
-        type = cmd_EXIT;
+        pBlocks->type = cmd_EXIT;
     }
     else if(strncmp(cmd.start, "/auth", cmd.len) == 0)
     {
-        getWord(&first, &(cmd.start[cmd.len]), buffer->used - (cmd.len));
-        getWord(&second, &(first.start[first.len]), buffer->used - (cmd.len + first.len));
-        getWord(&third, &(second.start[second.len]), buffer->used - (cmd.len + first.len + second.len));
-        type = cmd_AUTH;
+        // separate words and store in into BytesBlocks
+        TRY_GET_WORD( getWord(&first, &(cmd.start[cmd.len]), buffer->used - (cmd.len)) )
+        TRY_GET_WORD( getWord(&second, &(first.start[first.len]), buffer->used - (cmd.len + first.len)) )
+        TRY_GET_WORD( getWord(&third, &(second.start[second.len]), buffer->used - (cmd.len + first.len + second.len)))
+
+        // set message flag
         *flags = msg_flag_AUTH;
+
+        // store information into correct ProtocolBlocks parts
+        pBlocks->type = cmd_AUTH;
+        pBlocks->cmd_auth_username = first;
+        pBlocks->cmd_auth_secret = second;
+        pBlocks->cmd_auth_displayname = third;
     }
-    else if(strncmp(cmd.start, "/join", cmd.len) == 0)
+    else if(  ((tmp = strncmp(cmd.start, "/join", cmd.len)) == 0) ||
+                    (strncmp(cmd.start, "/rename", cmd.len) == 0))
     {
-        getWord(&first, &(cmd.start[cmd.len]), buffer->used - (cmd.len));
-        type = cmd_JOIN;
-    }
-    else if(strncmp(cmd.start, "/rename", cmd.len) == 0)
-    {
-        getWord(&first, &(cmd.start[cmd.len]), buffer->used - (cmd.len));
-        type = cmd_RENAME;
+        // set start at after command 
+        first.start = &(cmd.start[cmd.len]);
+        // find first non white character
+        size_t index = skipBlankCharsInString(first.start, buffer->used - cmd.len);
+        // update first start position
+        first.start = &(first.start[index]);
+        // find end of line in string
+        first.len = findNewLineInString(first.start, buffer->used - cmd.len);
+
+        // store information into correct ProtocolBlocks parts
+        if(tmp == 0)
+        {
+            pBlocks->type = cmd_JOIN;
+            pBlocks->cmd_join_channelID = first;
+        }
+        else
+        {
+            pBlocks->type = cmd_RENAME;
+            pBlocks->cmd_rename_displayname = first;     
+        }
+            
     }
     else if(strncmp(cmd.start, "/help", cmd.len) == 0)
     {
-        type = cmd_HELP;
+        // store information into correct ProtocolBlocks parts
+        pBlocks->type = cmd_HELP;
     }
     else if(strncmp(cmd.start, "/exit", cmd.len) == 0)
     {
-        type = cmd_EXIT;
+        // store information into correct ProtocolBlocks parts
+        pBlocks->type = cmd_EXIT;
     }
     else
     {
-        cmd.len = 0;
-        cmd.start = NULL;
-
-        first.start = buffer->data;
-        first.len = buffer->used; 
-        type = cmd_MSG;
+        // store information into correct ProtocolBlocks parts
+        pBlocks->cmd_msg_MsgContents.start = buffer->data;
+        pBlocks->cmd_msg_MsgContents.len = buffer->used;
+        pBlocks->type = cmd_MSG;
     }
-
-    commands[0] = cmd;
-    commands[1] = first;
-    commands[2] = second;
-    commands[3] = third;
-
-    return type;
 }

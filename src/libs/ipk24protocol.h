@@ -10,33 +10,83 @@
 #ifndef IPK24_PROTOCOL_H
 #define IPK24_PROTOCOL_H
 
-#include "customtypes.h"
-#include "buffer.h"
-#include "utils.h"
+#include "msgQueue.h"
+
+/**
+ * @brief Sturcture for assembling and dissasembling protocols to make 
+ * more readable what is getting store where with the use of unions.
+ * 
+ */
+typedef struct ProtocolBlocks {
+    unsigned char type;
+    uint16_t msgID;
+
+    // 0th block
+    union 
+    {
+        BytesBlock zeroth;
+        BytesBlock cmd_command;
+        BytesBlock cmd_msg_MsgContents;
+        BytesBlock cmd_conf_lowMsgID;
+
+        BytesBlock msg_reply_result;
+        BytesBlock msg_auth_username;
+        BytesBlock msg_join_channelID;
+        BytesBlock msg_msg_displayname;
+        BytesBlock msg_err_displayname;
+    };
+    // 1st block
+    union
+    {
+        BytesBlock first;
+        BytesBlock cmd_auth_username;
+        BytesBlock cmd_join_channelID;
+        BytesBlock cmd_rename_displayname;
+        BytesBlock cmd_conf_highMsgID;
+
+        BytesBlock msg_reply_refMsgID;
+        BytesBlock msg_auth_displayname;
+        BytesBlock msg_join_displayname;
+        BytesBlock msg_msg_MsgContents;
+        BytesBlock msg_err_MsgContents;
+    };
+    // 2nd block
+    union
+    {
+        BytesBlock second;
+        BytesBlock cmd_auth_secret;
+
+        BytesBlock msg_reply_MsgContents;
+        BytesBlock msg_auth_secret;
+    };
+    // 3rd block
+    union
+    {
+        BytesBlock third;
+        BytesBlock cmd_auth_displayname;
+    };
+} ProtocolBlocks;
 
 /**
  * @brief Assembles protocol from commands and command type into a buffer
  * 
- * @param type Recognized type of command user provided
- * @param commands Separated commands from user input
+ * @param pBlocks Separated commands and values from user input
  * @param buffer Output buffer to be trasmited to the server
  * that don't have all informations provided by user at start
  * @param progInt Pointer to ProgramInterface
  * 
- * @return Returns true if buffer can be trasmitted to the server
+ * @return Returns true if buffer can be sended to the server
  */
-bool assembleProtocol(cmd_t type, BytesBlock commands[4], Buffer* buffer, ProgramInterface* progInt);
+bool assembleProtocol(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterface* progInt);
 
 /**
- * @brief Disassebles protocol from provided Buffer to commands, 
- * message type and message ID
+ * @brief Dissassembles protocol from Buffer into commands, msgType and msgId
  * 
- * @param buffer Input buffer which will be disassembled 
- * @param commands Output commands which will be filled
- * @param msgType Message type that was detected
- * @param msgId Message ID that was detected
+ * @param buffer Input buffer containing message
+ * @param pBlocks Separated commands and values from user input
+ * @param msgId Detected message ID 
  */
-void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, u_int16_t* msgId);
+void disassebleProtocol(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* msgId);
 
 #include "msgQueue.h"
 
@@ -53,22 +103,7 @@ void disassebleProtocol(Buffer* buffer, BytesBlock commands[4], msg_t* msgType, 
  * @param flags Flags that will be set to message
  * @return cmd_t Returns command type
  */
-cmd_t userInputToCmds(Buffer* buffer, BytesBlock commands[4], bool* eofDetected, msg_flags* flags);
-/**
- * @brief Converts 16bit message id into an two unsinged chars
- * 
- * @param high Output pointer to unsigned char, upper/higher half of number
- * @param low Output pointer to unsigned char, lower half of number
- * @param msgCounter Input number to be separated
- */
-void breakU16IntToBytes(char* high, char* low, uint16_t msgCounter);
+void userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, bool* eofDetected, msg_flags* flags);
 
-/**
- * @brief Converts bwo bytes from input char array into 16bit usigned integer
- * 
- * @param high Higher byte
- * @param low Lower byte
- * @return u_int16_t 
- */
-u_int16_t convert2BytesToU16Int(char high, char low);
+
 #endif

@@ -15,9 +15,8 @@
 #include "string.h"
 #include "stdbool.h"
 #include "pthread.h"
+#include "stdint.h"
 #include "unistd.h"
-
-#include "buffer.h" 
 
 // ----------------------------------------------------------------------------
 //  Enums
@@ -35,20 +34,17 @@ typedef enum FSM {
     fsm_END
     } fsm_t;
 
-typedef enum CommandType {cmd_AUTH, cmd_JOIN, cmd_RENAME, cmd_HELP, cmd_CONF, cmd_MSG, cmd_EXIT, cmd_NONE} cmd_t;
-
-typedef enum Protocols {prot_ERR=-50, prot_UDP=50, prot_TCP=100} prot_t;
-
-typedef enum MessageType {
-    msg_CONF = 0x00,
-    msg_REPLY = 0x01,
-    msg_AUTH = 0x02,
-    msg_JOIN = 0x03,
-    msg_MSG = 0x04,
-    msg_ERR = 0xFE,
-    msg_BYE = 0xFF,
-    msg_UNKNOWN = 0xAA
-  } msg_t;
+typedef enum CommandType {
+    cmd_AUTH, 
+    cmd_JOIN, 
+    cmd_RENAME, 
+    cmd_HELP, 
+    cmd_CONF, 
+    cmd_MSG, 
+    cmd_EXIT, 
+    cmd_NONE,
+    cmd_CONVERSION_ERR
+    } cmd_t;
 
 
 
@@ -68,43 +64,7 @@ typedef struct BytesBlock {
     size_t len; // length of the block
 } BytesBlock;
 
-#include "customtypes.h"
 
-typedef struct CommunicationDetails {
-    Buffer displayName;
-    Buffer channelID;
-    u_int16_t msgCounter;
-} CommunicationDetails;
-
-
-
-
-typedef struct ThreadCommunication {
-    // true = work as normal, false = prepare to end
-    bool continueProgram; // variable to signal that program should prepare for finishing
-    fsm_t fsmState; // state of FSM, how should program behave 
-
-    pthread_mutex_t* stdoutMutex;
-    pthread_mutex_t* fsmMutex;
-
-    struct MessageQueue* sendingQueue; // queue of outcoming (user sent) messages
-    struct MessageQueue* receivedQueue; // queue of incoming (server sent) messages
-
-    pthread_cond_t* senderEmptyQueueCond;// signaling sender thread from main thread
-    pthread_mutex_t* senderEmptyQueueMutex;// signaling sender thread from main thread
-
-    pthread_cond_t* rec2SenderCond; // signaling sender thread from receiver thread
-    pthread_mutex_t* rec2SenderMutex; // signaling sender thread from receiver thread
-
-    pthread_cond_t* mainCond; // signaling sender thread from receiver thread
-    pthread_mutex_t* mainMutex; // signaling sender thread from receiver thread
-} ThreadCommunication;
-
-typedef struct ProgramInterface {
-    CommunicationDetails* comDetails;
-    struct NetworkConfig* netConfig;
-    ThreadCommunication* threads;
-} ProgramInterface;
 // ----------------------------------------------------------------------------
 //  Functions
 // ----------------------------------------------------------------------------
@@ -125,13 +85,16 @@ int errHandling(const char* msg, int errorCode);
 void displayMsgToUser(const char* msg);
 
 /**
- * @brief Fills BytesBlock variable from last word found 
- * Skips all blank characters (spaces and tabs) 
- * @param block Variable of initialized 
- * @param startOfLastWord 
- * @param bufferSize 
+ * @brief Returns word from string. Look from first character until 
+ * blank character is found
+ * 
+ * @param block BytesBlock to which should the result be saved
+ * @param startOfLastWord Pointer to the start of the last word
+ * @param bufferSize Maximum size of buffer
+ * @return true Success
+ * @return false Failed
  */
-void getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize);
+bool getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize);
 /**
  * @brief Finds first blank character (spaces ' ' and tabulators '\t') 
  * in string and returns index of last character before blank character
@@ -141,6 +104,15 @@ void getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize);
  * @return long Index in string
  */
 long findBlankCharInString(char* string, size_t len);
+
+/**
+ * @brief Finds new line character in string
+ * 
+ * @param string Input string
+ * @param len Maximum length
+ * @return long Index in newline was found
+ */
+long findNewLineInString(char* string, size_t len);
 
 /**
  * @brief Skips blank character until a first non empty character is found
@@ -179,41 +151,30 @@ int isEndingCharacter(char input);
 void stringReplace(char* dst, char* src, size_t len);
 
 /**
- * @brief Prints help menu when user inputs /help command 
- */
-void printCliHelpMenu(const char* executableName);
-
-/**
- * @brief Prints user help menu in running client
+ * @brief Converts unsigned char into an CommandType
  * 
- * @param progInt Pointer to ProgramInterface for thread-safe printing
+ * @param input Input unsigned char
+ * @return cmd_t Returned value in cmd_t 
  */
-void printUserHelpMenu(ProgramInterface* progInt);
+cmd_t uchar2CommandType(unsigned char input);
 
 /**
- * @brief Changes program state to new state with thread protecion using mutex
+ * @brief Converts 16bit message id into an two unsinged chars
  * 
- * @param newState New state to be set
+ * @param high Output pointer to unsigned char, upper/higher half of number
+ * @param low Output pointer to unsigned char, lower half of number
+ * @param msgCounter Input number to be separated
  */
-void setProgramState(ProgramInterface* progInt, fsm_t newState);
+void breakU16IntToBytes(char* high, char* low, uint16_t msgCounter);
 
 /**
- * @brief Returns program state with thread protecion using mutex
- */
-fsm_t getProgramState(ProgramInterface* progInt);
-
-
-/**
- * @brief Adds ONE to message counter
+ * @brief Converts bwo bytes from input char array into 16bit usigned integer
  * 
- * @param newState New state to be set
+ * @param high Higher byte
+ * @param low Lower byte
+ * @return uint16_t 
  */
-void incMessageCounter(ProgramInterface* progInt);
-
-/**
- * @brief Returns message counter
- */
-uint16_t getMessageCounter(ProgramInterface* progInt);
+uint16_t convert2BytesToU16Int(char high, char low);
 
 /**
  * @brief Macro for safe printing using "global" stdoutMutex.

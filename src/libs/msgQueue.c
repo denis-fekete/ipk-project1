@@ -234,9 +234,17 @@ void queuePopMessage(MessageQueue* queue)
     // set queue first to message behind old first message
     queue->first = oldFirst->behindMe;
 
-    // destroy message
-    bufferDestory(oldFirst->buffer); // buffer.data
-    free(oldFirst->buffer); // buffer pointer
+    if(oldFirst == queue->last)
+    {
+        queue->last = NULL;
+    }
+
+    if(oldFirst->buffer != NULL)
+    {
+        // destroy message
+        bufferDestory(oldFirst->buffer); // buffer.data
+        free(oldFirst->buffer); // buffer pointer
+    }
     free(oldFirst); // message pointer
 
     // decrease size of queue
@@ -447,6 +455,27 @@ msg_t queueGetMessageMsgType(MessageQueue* queue)
 //
 // ----------------------------------------------------------------------------
 
+
+/**
+ * @brief Converts integer into and MessageType
+ * 
+ * @param input Input integer
+ * @return msg_t MessageType to be returned
+ */
+msg_t uchar2msgType(unsigned char input)
+{
+    switch (input)
+    {
+    case 0x00: return msg_CONF;
+    case 0x01: return msg_REPLY;
+    case 0x02: return msg_AUTH;
+    case 0x03: return msg_JOIN;
+    case 0x04: return msg_MSG;
+    case 0xFE: return msg_ERR;
+    case 0xFF: return msg_BYE;
+    default: return msg_UNKNOWN;
+    }
+}
 
 #undef HIGHER_BYTE_POSITION
 #undef LOWER_BYTE_POSITION

@@ -23,18 +23,14 @@ int errHandling(const char* msg, int errorCode)
 long findZeroInString(char* string, size_t len)
 {
     long index = 0;
-    for(; ((size_t)index < len) && (string[index] != '\0') ; index++) {}
-
-    // -1 to return index of last character before \0
-    index = index - 1;
-
-    if(index < 0)
+    while( ((size_t)index < len) && (string[index] != 0) )
     {
-        if(index == -1) { return 0; }
-        else
-        {
-            return errHandling("Intrnal error in findZeroInString()", 1); // TODO: change error code
-        }
+        index++;
+    }
+
+    if(index <= 0)
+    {
+        return errHandling("Intrnal error in findZeroInString()", 1); // TODO: change error code
     }
     else { return index; }
 }
@@ -44,7 +40,17 @@ long findZeroInString(char* string, size_t len)
 //
 // ----------------------------------------------------------------------------
 
-void getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize)
+/**
+ * @brief Returns word from string. Look from first character until 
+ * blank character is found
+ * 
+ * @param block BytesBlock to which should the result be saved
+ * @param startOfLastWord Pointer to the start of the last word
+ * @param bufferSize Maximum size of buffer
+ * @return true Success
+ * @return false Failed
+ */
+bool getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize)
 {
     if(block == NULL || startOfLastWord == NULL || bufferSize <= 0)
     {
@@ -52,11 +58,13 @@ void getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize)
     }
 
     size_t index = skipBlankCharsInString(startOfLastWord, bufferSize);
-    // +1 because 
     block->start = &(startOfLastWord[index]);
 
     index = findBlankCharInString(block->start, bufferSize - block->len);
     block->len = index;
+    
+    // if block lenght is not zero returns true ass success, else failed
+    return (block->len != 0) ? true : false;
 }
 
 // ----------------------------------------------------------------------------
@@ -78,6 +86,27 @@ long findBlankCharInString(char* string, size_t len)
     return -1;
 }
 
+/**
+ * @brief Finds new line character in string
+ * 
+ * @param string Input string
+ * @param len Maximum length
+ * @return long Index in newline was found
+ */
+long findNewLineInString(char* string, size_t len)
+{
+    size_t index = 0;
+    for(; index <= len ; index++)
+    {
+        if(string[index] == '\0' || string[index] == '\n')
+        { 
+            return index;
+        }
+    }
+
+    // Character was not found
+    return -1;
+}
 
 
 long skipBlankCharsInString(char* string, size_t len)
@@ -134,112 +163,50 @@ void stringReplace(char* dst, char* src, size_t len)
     #endif
 }
 
+
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
 
 /**
- * @brief Prints help menu when user inputs /help command 
- */
-void printCliHelpMenu(const char* executableName)
-{
-    printf(
-        "Usage: %s [OPTION] [ARGUMENT] ...\n"
-        "Starts client for communication with server at provided address "
-        "(through -s OPTION) using IPK24-CHAT Protocol based on TCP or "
-        "UDP (based on -t OPTION)\n"
-        "\n"
-        "Mandatory options:\n"
-        "\t-s\t- "
-        "Sets server IP address (can be in \"www.server.com\" format) "
-        "to which client will try to connect\n"
-        "\t-t\t- "
-        "Sets between UDP or TCP protocol to be used for sending messages to server\n"
-        "\nNon-mandatory options:\n"
-        "\t-p\t- "
-        "Specifies which port will client try to connect to at specified "
-        "IP adress. Default value is 4567.\n"
-        "\t-d\t- "
-        "Sets UDP confirmation timeout in milliseconds\n"
-        "\t-r\t- "
-        "Sets maximum number of UDP retransmissions\n"
-        "\t-h\t- "
-        "Prints this help menu end exits program with code 0\n"
-
-        , executableName
-    );
-}
-
-/**
- * @brief Prints user help menu in running client
+ * @brief Converts unsigned char into an CommandType
  * 
- * @param progInt Pointer to ProgramInterface for thread-safe printing
+ * @param input Input unsigned char
+ * @return cmd_t Returned value in cmd_t 
  */
-void printUserHelpMenu(ProgramInterface* progInt)
+cmd_t uchar2CommandType(unsigned char input)
 {
-    safePrintStdout(
-        "Commands start with \"/\", \"{arg}\" symbolize mandatory arguments for"
-        " command, explanation of command is written after \"-\" symbol."
-        " Eligable commands are listed below: \n"
-        "\n\t/auth {Username} {Secret} {DisplayName}\t\t- "
-        "Authenticates user to server with data provided from the arguments. "
-        "{Username} and {Secret} are credentials. {Displayname} is name under "
-        "which will user(this) send messages to server."
-        "\n\t/join {ChannelID}\t\t\t\t- "                 
-        "Joins user to channel with {ChannelID}"
-        "\n\t/rename {DisplayName}\t\t\t\t- "             
-        "Renames user to {Displayname}"
-        "\n\t/help\t\t\t\t\t\t- "                     
-        "Prints this help message."
-        "\n"
-        );
+    int tmp = input;
+    if(tmp >= cmd_AUTH && tmp <= cmd_NONE)
+    {
+        return (enum CommandType) tmp;
+    }
+
+    return cmd_CONVERSION_ERR;
 }
 
-
 /**
- * @brief Changes program state to new state with thread protecion using mutex
+ * @brief Converts 16bit message id into an two unsinged chars
  * 
- * @param newState New state to be set
+ * @param high Output pointer to unsigned char, upper/higher half of number
+ * @param low Output pointer to unsigned char, lower half of number
+ * @param msgCounter Input number to be separated
  */
-void setProgramState(ProgramInterface* progInt, fsm_t newState)
+void breakU16IntToBytes(char* high, char* low, uint16_t msgCounter)
 {
-    debugPrintSeparator(stdout);
-    pthread_mutex_lock(progInt->threads->fsmMutex);
-    debugPrint(stdout, "FSM state changed. Old: %i", progInt->threads->fsmState);
-    progInt->threads->fsmState = newState;
-    pthread_mutex_unlock(progInt->threads->fsmMutex);
-    debugPrint(stdout, ", New: %i\n", newState);
-    debugPrintSeparator(stdout);
+    *high = (unsigned char)((msgCounter) >> 8);
+    *low = (unsigned char)((msgCounter) & 0xff);
 }
 
 /**
- * @brief Returns program state with thread protecion using mutex
- */
-fsm_t getProgramState(ProgramInterface* progInt)
-{
-    pthread_mutex_lock(progInt->threads->fsmMutex);
-    fsm_t val =  progInt->threads->fsmState;
-    pthread_mutex_unlock(progInt->threads->fsmMutex);
-
-    return val;
-}
-
-/**
- * @brief Adds ONE to message counter
+ * @brief Converts bwo bytes from input char array into 16bit usigned integer
  * 
- * @param newState New state to be set
+ * @param high Higher byte
+ * @param low Lower byte
+ * @return uint16_t 
  */
-void incMessageCounter(ProgramInterface* progInt)
+uint16_t convert2BytesToU16Int(char low, char high)
 {
-    if(progInt){}
-}
-
-/**
- * @brief Returns message counter
- */
-uint16_t getMessageCounter(ProgramInterface* progInt)
-{
-    if(progInt){}
-    return 1;
-
+    // Join bytes into one number
+    return (low +  (high << 8)); 
 }

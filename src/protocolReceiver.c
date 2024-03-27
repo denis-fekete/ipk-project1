@@ -17,17 +17,20 @@ void assembleConfirmProtocol(Buffer* recvBuffer, Buffer* confirmBuffer, ProgramI
          errHandling("Invalid pointers passed as arguements for assembleConfirmProtocol()\n", 1); // TODO:
     }
 
-    BytesBlock commands[4];
+    ProtocolBlocks pBlocks;
+
     // set commands values to received message id
-    commands[0].start = &(recvBuffer->data[1]);
-    commands[0].len = 1;
-    commands[1].start = &(recvBuffer->data[2]);
-    commands[1].len = 1;
+    pBlocks.cmd_conf_lowMsgID.start = &(recvBuffer->data[1]);
+    pBlocks.cmd_conf_lowMsgID.len = 1;
 
-    commands[2].start = NULL; commands[2].len = 0;
-    commands[3].start = NULL; commands[3].len = 0;
+    pBlocks.cmd_conf_highMsgID.start = &(recvBuffer->data[2]);
+    pBlocks.cmd_conf_highMsgID.len = 1;
 
-    bool res = assembleProtocol(cmd_CONF, commands, confirmBuffer, progInt);
+    pBlocks.second.start = NULL; pBlocks.second.len = 0;
+    pBlocks.third.start = NULL; pBlocks.third.len = 0;
+    pBlocks.type = cmd_CONF;
+
+    bool res = assembleProtocol(&pBlocks, confirmBuffer, progInt);
     if(!res)
     {
         errHandling("Assembling of confrim protocol failed\n", 1); // TODO:
@@ -43,7 +46,7 @@ void sendConfirm(Buffer* serverResponse, Buffer* confirmBuffer, ProgramInterface
     queueUnlock(progInt->threads->sendingQueue);
 }
 
-void receiverFSM(ProgramInterface* progInt, msg_t msgType, u_int16_t msgID, BytesBlock blocks[4], Buffer* serverResponse,
+void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlocks, Buffer* serverResponse,
     MessageQueue* sendingQueue, MessageQueue* confirmedMsgs, Buffer* confirmBuffer)
 {
     Message* topOfQueue = NULL;
@@ -57,6 +60,7 @@ void receiverFSM(ProgramInterface* progInt, msg_t msgType, u_int16_t msgID, Byte
     char lowMsgIDByte;
     breakU16IntToBytes(&highMsgIDByte, &lowMsgIDByte, msgID);
 
+    queueLock(confirmedMsgs);
     // if message id queue contains received message add it to it and prerform action
     if(! queueContainsMessageId(confirmedMsgs, highMsgIDByte, lowMsgIDByte))
     {
@@ -66,19 +70,20 @@ void receiverFSM(ProgramInterface* progInt, msg_t msgType, u_int16_t msgID, Byte
     {
         repetitiveMsg = true;
     }
+    queueUnlock(confirmedMsgs);
 
     // ------------------------------------------------------------------------
     // Perform action based on message type
     // ------------------------------------------------------------------------
 
-    switch(msgType)
+    switch(uchar2msgType(pBlocks->type))
     {
         case msg_CONF:
             queueLock(sendingQueue);
             // check if top is not empty
             if((topOfQueue = queueGetMessage(sendingQueue)) != NULL)
             {
-                u_int16_t queueTopMsgID = queueGetMessageID(sendingQueue);
+                uint16_t queueTopMsgID = queueGetMessageID(sendingQueue);
             
                 // if first in queue is same as incoming confirm, confirm message
                 if(msgID == queueTopMsgID)
@@ -148,7 +153,7 @@ void receiverFSM(ProgramInterface* progInt, msg_t msgType, u_int16_t msgID, Byte
                 }
                 else
                 {
-                    safePrintStdout("Server: %s\n", blocks[2].start);
+                    safePrintStdout("Server: %s\n", pBlocks->msg_reply_MsgContents.start);
 
                     queueLock(sendingQueue);
                     // check if top of queue is AUTH message, reject it
@@ -182,10 +187,10 @@ void receiverFSM(ProgramInterface* progInt, msg_t msgType, u_int16_t msgID, Byte
             pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
             pthread_cond_signal(progInt->threads->rec2SenderCond);
 
-
-            if(blocks[0].start != NULL && blocks[1].start != NULL)
+            if(pBlocks->msg_msg_displayname.start != NULL && pBlocks->msg_msg_MsgContents.start != NULL)
             {
-                safePrintStdout("%s: %s\n", blocks[0].start, blocks[1].start);
+                safePrintStdout("%s: %s\n", pBlocks->msg_msg_displayname.start, 
+                                pBlocks->msg_msg_MsgContents.start);
             }
             break;
         // --------------------------------------------------------------------
@@ -219,8 +224,7 @@ void* protocolReceiver(void *vargp)
     // Set up variables for receiving messages
     // ------------------------------------------------------------------------
     ProgramInterface* progInt = (ProgramInterface*) vargp;
-
-    BytesBlock blocks[4]; // array of commands 
+    ProtocolBlocks pBlocks;
 
     Buffer serverResponse;
     bufferInit(&serverResponse);
@@ -235,7 +239,6 @@ void* protocolReceiver(void *vargp)
     // Await response
     int flags = 0; // TODO: look if some flags could be used
     uint16_t msgID; // message id incoming
-    msg_t msgType; // type of message received
 
     // ------------------------------------------------------------------------
     // Set up epoll to react to the opened socket
@@ -257,7 +260,6 @@ void* protocolReceiver(void *vargp)
     // ------------------------------------------------------------------------
     // Set up variables for receiving messages
     // ------------------------------------------------------------------------
-
     while(getProgramState(progInt) != fsm_END)
     {
         int bytesRx = recvfrom(progInt->netConfig->openedSocket, serverResponse.data,
@@ -270,16 +272,16 @@ void* protocolReceiver(void *vargp)
         serverResponse.used = bytesRx; //set buffer length (activly used) bytes
         
 
-        disassebleProtocol(&serverResponse, blocks, &msgType, &msgID);
+        disassebleProtocol(&serverResponse, &pBlocks, &msgID);
         
         #ifdef DEBUG
-            debugPrint(stdout, "DEBUG: Received protocol, type: (%i), bytes(%i), contents:\n", msgType, bytesRx);
+            debugPrint(stdout, "DEBUG: Received protocol, type: (%i), bytes(%i), contents:\n", pBlocks.type, bytesRx);
             bufferPrint(&serverResponse, 1); // DEBUG:
             debugPrintSeparator(stdout);
         #endif
 
         // if in fsm_AUTH state and incoming msg is not REPLY do nothing
-        if(getProgramState(progInt) == fsm_START && msgType != msg_REPLY && msgType != msg_CONF)
+        if(getProgramState(progInt) == fsm_START && pBlocks.type != msg_REPLY && pBlocks.type != msg_CONF)
         {
             debugPrint(stdout, "DEBUG: Receiver thrown away a message because"
                 "program is in START state and message is not CONFIRM or REPLY");
@@ -287,12 +289,13 @@ void* protocolReceiver(void *vargp)
         }
 
 
-        receiverFSM(progInt, msgType, msgID, blocks, &serverResponse, 
+        receiverFSM(progInt, msgID, &pBlocks, &serverResponse, 
             progInt->threads->sendingQueue, &confirmedMsgs, &confirmBuffer);
     }
 
     bufferDestory(&serverResponse);
     bufferDestory(&confirmBuffer);
+    queueDestroy(&confirmedMsgs);
 
     debugPrint(stdout, "DEBUG: Receiver ended\n");
 

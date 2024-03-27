@@ -16,6 +16,8 @@
 
 #include "utils.h"
 
+typedef enum Protocols {prot_ERR=-50, prot_UDP=50, prot_TCP=100} prot_t;
+
 typedef struct NetworkConfig {
     prot_t protocol;
     uint16_t portNumber;
@@ -28,7 +30,7 @@ typedef struct NetworkConfig {
 
 #define PORT_NUMBER 4567
 
-#define DEFAULT_NETWORK_CONFIG(config)  \
+#define DEFAULT_NETWORK_CONFIG(config)   \
     config->protocol = prot_ERR;         \
     config->portNumber = PORT_NUMBER;    \
     config->udpTimeout = 250;            \

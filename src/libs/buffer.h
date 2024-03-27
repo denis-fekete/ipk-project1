@@ -13,6 +13,7 @@
 #include "stdlib.h"
 #include "stdio.h"
 
+#include "utils.h"
 
 #define INITIAL_BUFFER_SIZE 256
 
@@ -28,7 +29,6 @@ typedef struct Buffer
     size_t used;
 } Buffer;
 
-#include "utils.h"
 
 /**
  * @brief Sets default values to the buffer

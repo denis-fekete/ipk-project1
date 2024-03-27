@@ -14,12 +14,12 @@
 
 #include "getopt.h" // argument processing
 
-#include "libs/customtypes.h"
-#include "libs/buffer.h"
-#include "libs/utils.h"
-#include "libs/networkCom.h"
-#include "libs/msgQueue.h"
-#include "libs/ipk24protocol.h"
+// #include "libs/customtypes.h"
+// #include "libs/buffer.h"
+// #include "libs/utils.h"
+// #include "libs/networkCom.h"
+// #include "libs/msgQueue.h"
+// #include "libs/ipk24protocol.h"
 
 #include "protocolReceiver.h"
 #include "protocolSender.h"
@@ -66,7 +66,7 @@ void processArguments(int argc, char* argv[], enum Protocols* prot, Buffer* ipAd
             break;
         case 's': ; // compiler doesn't like size_t being after : 
             optLen = strlen(optarg);
-            bufferResize(ipAddress, optLen);
+            bufferResize(ipAddress, optLen + 1);
             stringReplace(ipAddress->data, optarg, optLen);
             ipAddress->data[optLen] = '\0';
             ipAddress->used = optLen + 1;
@@ -94,41 +94,48 @@ void processArguments(int argc, char* argv[], enum Protocols* prot, Buffer* ipAd
 
 /**
  * @brief Updates values in CommunicationDetails comDetails variable
- * based on cmdType provided.  
+ * based on CommandType provided in ProgramBlocks.  
  * 
  * @note Stored data is copied, so commands can be safely rewritten
  * 
- * @param cmdType Recognized command from user 
- * @param commands Array of commands
+ * @param pBlocks Structure that holds separated commands and type
  * @param comDetails Pointer to the CommunicationDetails variable that will 
  * be updated
  */
-void storeInformation(cmd_t cmdType, BytesBlock commands[4], CommunicationDetails* comDetails)
+void storeInformation(ProtocolBlocks* pBlocks, CommunicationDetails* comDetails)
 {
-    switch (cmdType)
+    
+    switch (uchar2CommandType(pBlocks->type))
     {
     case cmd_AUTH:
         // commands: CMD, USERNAME, SECRET, DISPLAYNAME
-        bufferResize(&(comDetails->displayName), commands[3].len + 1);
+        bufferResize(&(comDetails->displayName), pBlocks->cmd_auth_displayname.len + 1);
 
-        stringReplace(comDetails->displayName.data, commands[3].start, commands[3].len);
-        comDetails->displayName.data[commands[3].len] = '\0';
-        comDetails->displayName.used = commands[3].len;
+        stringReplace(  comDetails->displayName.data, 
+                        pBlocks->cmd_auth_displayname.start, 
+                        pBlocks->cmd_auth_displayname.len);
+
+        comDetails->displayName.data[pBlocks->cmd_auth_displayname.len] = '\0';
+        comDetails->displayName.used = pBlocks->cmd_auth_displayname.len;
         break;
     case cmd_JOIN:
         // commands: CMD, CHANNELID
-        bufferResize(&(comDetails->channelID), commands[1].len + 1);
+        bufferResize(&(comDetails->channelID), pBlocks->cmd_join_channelID.len + 1);
 
-        stringReplace(comDetails->channelID.data, commands[1].start, commands[1].len);
-        comDetails->channelID.used = commands[1].len;
+        stringReplace(  comDetails->channelID.data, 
+                        pBlocks->cmd_join_channelID.start, 
+                        pBlocks->cmd_join_channelID.len);
+        comDetails->channelID.used = pBlocks->cmd_join_channelID.len;
         break;
     case cmd_RENAME:
         // commands: CMD, DISPLAYNAME
-        bufferResize(&(comDetails->displayName), commands[1].len + 1);
-        stringReplace(comDetails->displayName.data, commands[1].start, commands[1].len);
-        comDetails->displayName.data[commands[1].len] = '\0';
-        comDetails->displayName.used = commands[1].len;
-        break;;
+        bufferResize(&(comDetails->displayName), pBlocks->cmd_rename_displayname.len + 1);
+        stringReplace(  comDetails->displayName.data, 
+                        pBlocks->cmd_rename_displayname.start, 
+                        pBlocks->cmd_rename_displayname.len);
+        comDetails->displayName.data[pBlocks->cmd_rename_displayname.len] = '\0';
+        comDetails->displayName.used = pBlocks->cmd_rename_displayname.len;
+        break;
     default: break;
     }
 }
@@ -140,17 +147,16 @@ void storeInformation(cmd_t cmdType, BytesBlock commands[4], CommunicationDetail
  * 
  * @param cmdType Detected command type 
  * @param progInt Pointer to the ProgramInterface
- * @param commands Detected commands
  * @param flags Flags to be set to the message
  * @return true Message can be sended
  * @return false Message cannot be sended
  */
-bool filterCommandsByFSM(cmd_t cmdType, ProgramInterface* progInt, msg_flags* flags)
+bool filterCommandsByFSM(ProtocolBlocks* pBlocks, ProgramInterface* progInt, msg_flags* flags)
 {
     // if buffer is empty ... newline was entered
-    if(cmdType == cmd_NONE) return false;
+    if(uchar2CommandType(pBlocks->type) == cmd_NONE) return false;
 
-    switch (cmdType)
+    switch (uchar2CommandType(pBlocks->type))
     {
     case cmd_AUTH:
         if( getProgramState(progInt) == fsm_START )
@@ -162,6 +168,17 @@ bool filterCommandsByFSM(cmd_t cmdType, ProgramInterface* progInt, msg_flags* fl
         break;
     case cmd_HELP:
         printUserHelpMenu(progInt);
+        return false;
+    case cmd_RENAME:
+        // replace displayname stored in Communication Details with data 
+        // from user provided command
+        bufferResize(   &(progInt->comDetails->displayName), 
+                        pBlocks->cmd_rename_displayname.len + 1);
+        stringReplace(  progInt->comDetails->displayName.data, 
+                        pBlocks->cmd_rename_displayname.start, 
+                        pBlocks->cmd_rename_displayname.len);
+        progInt->comDetails->displayName.used = pBlocks->cmd_rename_displayname.len;
+        progInt->comDetails->displayName.data[progInt->comDetails->displayName.used] = 0;
         return false;
     default:
         if( getProgramState(progInt) != fsm_OPEN)
@@ -177,9 +194,84 @@ bool filterCommandsByFSM(cmd_t cmdType, ProgramInterface* progInt, msg_flags* fl
     // should this message be not send?
     return true;
 }
+
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
+
+void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
+{
+    Buffer protocolMsg;
+    bufferInit(&protocolMsg);
+
+    bool canBeSended;
+    bool eofDetected = false;
+    msg_flags flags = msg_flag_NONE;
+    ProtocolBlocks pBlocks;
+
+    // continue while continueProgram is true, only main id can go into this loop
+    while (getProgramState(progInt) != fsm_END)
+    {
+        // --------------------------------------------------------------------
+        // Convert user input into an protocol
+        // --------------------------------------------------------------------
+        canBeSended = false;
+        eofDetected = false;
+        // Load buffer from stdin, store length of buffer
+        clientInput->used = loadBufferFromStdin(clientInput, &eofDetected);
+        // Separate clientCommands buffer into commands (ByteBlocks),
+        // store recognized command
+        flags = msg_flag_NONE;
+        userInputToCmds(clientInput, &pBlocks, &eofDetected, &flags);
+
+        // Filter commands by type and FSM state
+        canBeSended = filterCommandsByFSM(&pBlocks, progInt, &flags);
+        // if message should not be send skip it
+        if(!canBeSended) { continue; }
+        // update stored information about communication 
+        storeInformation(&pBlocks, progInt->comDetails);
+        
+        // Assembles array of bytes into Buffer protocolMsg, returns if 
+        // message can be trasmitted
+        canBeSended = assembleProtocol(&pBlocks, &protocolMsg, progInt);
+
+        if(canBeSended)
+        {
+            // add message to the queue
+            queueLock(progInt->threads->sendingQueue);
+
+            bool signalSender = false;
+            if(queueIsEmpty(progInt->threads->sendingQueue)) { signalSender = true; }
+            
+            queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags);
+            
+            // signal sender if he is waiting because queue is empty
+            if(signalSender)
+            {
+                pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
+            }
+            queueUnlock(progInt->threads->sendingQueue);
+        }
+        
+        // Exit loop if /exit detected 
+        if(pBlocks.type == cmd_EXIT)
+        {
+            // set state to empty queue, send bye and exit
+            setProgramState(progInt, fsm_EMPTY_Q_BYE);
+            // wake up sender to exit
+            pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
+        }
+    }
+
+    // free allocated memory
+    free(protocolMsg.data);
+}
+
+
+// ----------------------------------------------------------------------------
+//
+// ----------------------------------------------------------------------------
+
 
 
 int main(int argc, char* argv[])
@@ -198,12 +290,9 @@ int main(int argc, char* argv[])
     progInt->threads->fsmState = fsm_START;
 
     MessageQueue sendingQueue;
-    MessageQueue receivedQueue;
     queueInit(&sendingQueue); // queue of outcoming (user sent) messages
-    queueInit(&receivedQueue); // queue of incoming (server sent) messages
 
     progInt->threads->sendingQueue = &sendingQueue;
-    progInt->threads->receivedQueue = &receivedQueue;
     
     pthread_cond_t senderEmptyQueueCond;
     pthread_cond_init(&senderEmptyQueueCond, NULL);
@@ -243,6 +332,10 @@ int main(int argc, char* argv[])
 
     CommunicationDetails comDetails;
     progInterface.comDetails = &comDetails;
+    progInt->comDetails->msgCounter = 0;
+
+    bufferInit(&(progInt->comDetails->displayName));
+    bufferInit(&(progInt->comDetails->channelID));
 
     // ------------------------------------------------------------------------
     // Process CLI arguments from user
@@ -250,12 +343,12 @@ int main(int argc, char* argv[])
 
     // Use buffer for storing ip address, 
     // then used for storing client input / commanads
-    Buffer clientCommands; // 
-    bufferInit(&clientCommands);
+    Buffer ipAddress; 
+    bufferInit(&ipAddress);
 
     DEFAULT_NETWORK_CONFIG(progInt->netConfig);
 
-    processArguments(argc, argv, &(progInt->netConfig->protocol), &clientCommands, 
+    processArguments(argc, argv, &(progInt->netConfig->protocol), &ipAddress, 
                     &(progInt->netConfig->portNumber), &(progInt->netConfig->udpTimeout), 
                     &(progInt->netConfig->udpMaxRetries));
     
@@ -263,41 +356,23 @@ int main(int argc, char* argv[])
     { 
         errHandling("Argument protocol (-t udp / tcp) is mandatory!", 1); /*TODO:*/
     }
-    if(clientCommands.data == NULL)
+    if(ipAddress.data == NULL)
     {
         errHandling("Server address is (-s address) is mandatory", 1); /*TODO:*/ 
     }
 
     // ------------------------------------------------------------------------
-    // Get server information and create socket
+    // Get server information, create socket
     // ------------------------------------------------------------------------
 
     // open socket for comunication on client side (this)
     progInterface.netConfig->openedSocket = getSocket(progInt->netConfig->protocol);
     
-    struct sockaddr_in address = findServer(clientCommands.data, progInt->netConfig->portNumber);
+    struct sockaddr_in address = findServer(ipAddress.data, progInt->netConfig->portNumber);
 
     // get server address
     progInt->netConfig->serverAddress = (struct sockaddr*) &address;
     progInt->netConfig->serverAddressSize = sizeof(address);
-
-    // ------------------------------------------------------------------------
-    // Declaring and initializing variables need for communication
-    // ------------------------------------------------------------------------
-
-    cmd_t cmdType; // variable to store current command typed by user
-
-    Buffer protocolMsg;
-    bufferInit(&protocolMsg);
-
-    // Buffer clientCommands; bufferInit(&clientCommands); // Moved up for reusability
-    
-    progInt->comDetails->msgCounter = 0;
-
-    bufferInit(&(progInt->comDetails->displayName));
-    bufferInit(&(progInt->comDetails->channelID));
-
-    BytesBlock commands[4];
 
     // ------------------------------------------------------------------------
     // Setup second thread that will handle data receiving
@@ -313,68 +388,14 @@ int main(int argc, char* argv[])
     // Loop of communication
     // ------------------------------------------------------------------------
 
-    bool canBeSended;
-    bool eofDetected = false;
-    msg_flags flags = msg_flag_NONE;
-    ProtocolBlocks pBlocks;
-    // continue while continueProgram is true, only main id can go into this loop
-    while (getProgramState(progInt) != fsm_END)
-    {
-        // --------------------------------------------------------------------
-        // Convert user input into an protocol
-        // --------------------------------------------------------------------
-        canBeSended = false;
-        eofDetected = false;
-        // Load buffer from stdin, store length of buffer
-        clientCommands.used = loadBufferFromStdin(&clientCommands, &eofDetected);
-        // Separate clientCommands buffer into commands (ByteBlocks),
-        // store recognized command
-        flags = msg_flag_NONE;
-        cmdType = userInputToCmds(&clientCommands, commands, &eofDetected, &flags);
-
-        // Filter commands by type and FSM state
-        canBeSended = filterCommandsByFSM(cmdType, progInt, &flags);
-        // if message should not be send skip it
-        if(!canBeSended) { continue; }
-        // update stored information about communication 
-        storeInformation(cmdType, commands, progInt->comDetails);
-        
-        // Assembles array of bytes into Buffer protocolMsg, returns if 
-        // message can be trasmitted
-        canBeSended = assembleProtocol(cmdType, commands, &protocolMsg, progInt);
-
-        if(canBeSended)
-        {
-            // add message to the queue
-            queueLock(&sendingQueue);
-
-            bool signalSender = false;
-            if(queueIsEmpty(&sendingQueue)) { signalSender = true; }
-            
-            queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags);
-            
-            // signal sender if he is waiting because queue is empty
-            if(signalSender)
-            {
-                pthread_cond_signal(&senderEmptyQueueCond);
-            }
-            queueUnlock(&sendingQueue);
-        }
-        
-        // Exit loop if /exit detected 
-        if(cmdType == cmd_EXIT)
-        {
-            // set state to empty queue, send bye and exit
-            setProgramState(progInt, fsm_EMPTY_Q_BYE);
-            // wake up sender to exit
-            pthread_cond_signal(&senderEmptyQueueCond);
-        }
-    }
+    // reuse ipAddress buffer which is already initialized and unused
+    Buffer* clientInput = &ipAddress; 
+    userCommandHandling(progInt, clientInput);
 
     debugPrint(stdout, "DEBUG: Communicaton ended with %u messages\n", (comDetails.msgCounter - 1));
 
     // ------------------------------------------------------------------------
-    // Closing up communication
+    // Clean up resources 
     // ------------------------------------------------------------------------
 
     pthread_join(protReceiver, NULL);
@@ -383,11 +404,9 @@ int main(int argc, char* argv[])
     shutdown(progInt->netConfig->openedSocket, SHUT_RDWR);
     free(comDetails.displayName.data);
     free(comDetails.channelID.data);
-    free(clientCommands.data);
-    free(protocolMsg.data);
+    free(clientInput->data);
     queueDestroy(progInt->threads->sendingQueue);
-    queueDestroy(progInt->threads->receivedQueue);
-
+    
     pthread_mutex_destroy(&rec2SenderMutex);
     pthread_cond_destroy(&rec2SenderCond);
     pthread_mutex_destroy(&senderEmptyQueueMutex);

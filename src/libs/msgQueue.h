@@ -13,14 +13,35 @@
 
 #include "pthread.h"
 
-#include "buffer.h"
-#include "utils.h"
-#include "ipk24protocol.h"
-
+#include "programInterface.h"
 
 // ----------------------------------------------------------------------------
 // Defines, typedefs and structures
 // ----------------------------------------------------------------------------
+
+typedef struct ProgramInterface ProgramInterface; // declare that ProgramInterface will exist
+
+typedef enum MessageFlags {
+    msg_flag_NONE, 
+    msg_flag_DO_NOT_RESEND, 
+    msg_flag_AUTH, 
+    msg_flag_REJECTED, /*auth was rejected*/
+    msg_flag_CONFIRMED, /*auth was confirmed*/
+    msg_flag_ERR,
+    msg_flag_CONFIRM /*if message is confirm*/
+    } msg_flags;
+
+typedef enum MessageType {
+    msg_CONF = 0x00,
+    msg_REPLY = 0x01,
+    msg_AUTH = 0x02,
+    msg_JOIN = 0x03,
+    msg_MSG = 0x04,
+    msg_ERR = 0xFE,
+    msg_BYE = 0xFF,
+    msg_UNKNOWN = 0xAA
+  } msg_t;
+
 
 typedef struct Message {
     Buffer* buffer;
@@ -256,5 +277,13 @@ msg_t queueGetMessageMsgType(MessageQueue* queue);
 //
 // ----------------------------------------------------------------------------
 
+
+/**
+ * @brief Converts integer into and MessageType
+ * 
+ * @param input Input integer
+ * @return msg_t MessageType to be returned
+ */
+msg_t uchar2msgType(unsigned char input);
 
 #endif /*MSG_LISH_H*/
