@@ -71,11 +71,14 @@ void setProgramState(ProgramInterface* progInt, fsm_t newState)
 {
     debugPrintSeparator(stdout);
     pthread_mutex_lock(progInt->threads->fsmMutex);
-    debugPrint(stdout, "FSM state changed. Old: %i", progInt->threads->fsmState);
+
+    debugPrint(stdout, "DEBUG: FSM state changed. Old: %i", progInt->threads->fsmState);
     progInt->threads->fsmState = newState;
-    pthread_mutex_unlock(progInt->threads->fsmMutex);
+
     debugPrint(stdout, ", New: %i\n", newState);
     debugPrintSeparator(stdout);
+    
+    pthread_mutex_unlock(progInt->threads->fsmMutex);
 }
 
 /**

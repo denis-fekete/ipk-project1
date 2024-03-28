@@ -100,7 +100,7 @@ bool assembleProtocol(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterface*
         // check if displayname is stored
         if(progInt->comDetails->displayName.data == NULL)
         { 
-            safePrintStdout("Displayname not provided, cannot join! Use /help for help.");
+            safePrintStdout("System: Displayname not provided, cannot join! Use /help for help.\n");
             return false; // message cannot be sent
         }
         

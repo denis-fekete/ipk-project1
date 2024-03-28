@@ -34,6 +34,7 @@ void filterMessagesByFSM(ProgramInterface* progInt)
 
     switch (getProgramState(progInt))
     {
+    // ------------------ FSM IN BEFORE SUCCESSFULL AUTHENTICATION ------------
     case fsm_START:
     case fsm_AUTH_W82_BE_SENDED: /*authentication is waiting(W8) to(2) be sended*/
     case fsm_AUTH_SENDED: /*authetication was successfully sended*/
@@ -41,6 +42,7 @@ void filterMessagesByFSM(ProgramInterface* progInt)
         // if program is not in open state and message to be send is not auth 
         if(msgType != msg_AUTH)
         {
+            debugPrint(stdout, "DEBUG: Message that is not auth blocked because of FSM state\n");
             queueUnlock(sendingQueue);
             // wait for receiver to signal that authentication was confirmed
             pthread_cond_wait(progInt->threads->rec2SenderCond, 
@@ -52,15 +54,27 @@ void filterMessagesByFSM(ProgramInterface* progInt)
         // wait to prevent repetitive auth sending 
         else if(msgType == msg_AUTH && msgToBeSend->confirmed)
         {
-            debugPrint(stdout, "Message that is not auth blocked because of FSM state\n");
+            debugPrint(stdout, "DEBUG: AUTH message blocked because of FSM state (state: %i)\n", getProgramState(progInt));
             queueUnlock(sendingQueue);
             // message was confirmed, wait for receiver to ping me   
             pthread_cond_wait(progInt->threads->rec2SenderCond, 
                 progInt->threads->rec2SenderMutex);
+            // call filter again
+            filterMessagesByFSM(progInt);
             queueLock(sendingQueue);
         }
         break;
     // ------------------------------------------------------------------------
+    case fsm_W8_4_CONF: /*reply received, waiting for confirm to be sended*/
+        // if message to be send is confirm
+        if(msgType == msg_CONF)
+        {
+            // change state to open
+            setProgramState(progInt, fsm_OPEN);
+            // singal main to start processing another input
+            pthread_cond_signal(progInt->threads->mainCond);
+        }
+        break;
     case fsm_OPEN:
         switch(msgType)
         {
@@ -100,9 +114,24 @@ void filterResentMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
             // check if discarded message wasn't an auth message
             msg_flags flags = queueGetMessageFlags(sendingQueue);
             
-            if(flags == msg_flag_AUTH && getProgramState(progInt) == fsm_AUTH_SENDED) {
-                safePrintStdout("System: Authetication message request timed out. Please try again.\n");
-                setProgramState(progInt, fsm_START);
+            // if msg to be deleted is auth
+            if(flags == msg_flag_AUTH)
+            {
+                switch (getProgramState(progInt))
+                {
+                case fsm_START:
+                case fsm_AUTH_W82_BE_SENDED: /*authentication is waiting(W8) to(2) be sended*/
+                case fsm_AUTH_SENDED: /*authetication was successfully sended*/
+                case fsm_W8_4_REPLY: /*auth has been confirmed, waiting for reply*/
+                case fsm_W8_4_CONF: /*reply received, waiting for confirm to be sended*/
+                    safePrintStdout("System: Authetication message request timed out. Please try again.\n");
+                    setProgramState(progInt, fsm_START);
+                    // signal main to wake up
+                    pthread_cond_signal(progInt->threads->mainCond);
+                    break;
+                default:
+                    break;
+                }
             } else {
                 safePrintStdout("System: Request timed out. Last message was not sent.\n");   
             }
@@ -154,14 +183,10 @@ void* protocolSender(void* vargp)
 
         filterResentMessages(sendingQueue, progInt);
 
-        // make room for someone who is waiting
-        queueUnlock(sendingQueue);
-
         // --------------------------------------------------------------------
         // If queue is empty wait for someone to ping sender that msg was added
         // --------------------------------------------------------------------
 
-        queueLock(sendingQueue);
         // if queue is empty wait until it is filled
         if(queueIsEmpty(sendingQueue))
         {
@@ -171,17 +196,16 @@ void* protocolSender(void* vargp)
                 // bye was sended, end program
                 setProgramState(progInt, fsm_END);
                 queueUnlock(sendingQueue);
+                // signal main to end as well
+                pthread_cond_signal(progInt->threads->mainCond);
                 continue; // jump to while condition and end
             }
             else // else wait for someone to ping me
             {
-                // ping main to stop waiting if waiting
-                pthread_cond_signal(progInt->threads->mainCond);
-
-                queueUnlock(sendingQueue);
                 // use pthread wait for main thread to ping that queue is not 
                 // empty or timeout to expire
-                debugPrint(stdout, "DEBUG: Sender waiting\n");
+                debugPrint(stdout, "DEBUG: Sender waiting (queue empty)\n");
+                queueUnlock(sendingQueue);
                 pthread_cond_wait(progInt->threads->senderEmptyQueueCond, 
                     progInt->threads->senderEmptyQueueMutex);
                 continue;
@@ -209,9 +233,8 @@ void* protocolSender(void* vargp)
         queueSetMessageID(sendingQueue, progInt);
 
         #ifdef DEBUG
-            debugPrint(stdout, "DEBUG: Sender (queue len: %li", sendingQueue->len);
-            debugPrint(stdout,", tried to send a message:\n");
-            bufferPrint(msgToBeSend->buffer, 3); // this is causing seg fault
+            debugPrint(stdout, "DEBUG: Sender (queue len: %li): ", sendingQueue->len);
+            bufferPrint(msgToBeSend->buffer, 3);
         #endif
 
         int bytesTx; // number of sended bytes
@@ -227,12 +250,6 @@ void* protocolSender(void* vargp)
         {
             errHandling("Sending bytes was not successful", 1); // TODO: change error code
         }
-
-        #ifdef DEBUG
-            debugPrint(stdout, "DEBUG: Confirmed message sending\n");
-            debugPrintSeparator(stdout);
-        #endif
-
 
         // if DO_NOT_RESEND flags is set, delete msg from queue right away
         if(sendedMessageFlags == msg_flag_DO_NOT_RESEND || sendedMessageFlags == msg_flag_CONFIRM)

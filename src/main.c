@@ -25,17 +25,13 @@
 #include "protocolSender.h"
 
 #ifdef DEBUG
+    // global variable for printing to debug, only if DEBUG is defined
     pthread_mutex_t debugPrintMutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
-
-//Allow change of executable name in Makefile using -D{EXECUTABLE_NAME}
-#ifndef EXECUTABLE_NAME
-    #define EXECUTABLE_NAME "ipk24chat"
-#endif
 
 /**
  * @brief Processes arguments provided by user
@@ -52,7 +48,7 @@ void processArguments(int argc, char* argv[], enum Protocols* prot, Buffer* ipAd
         switch (opt)
         {
         case 'h':
-            printCliHelpMenu(EXECUTABLE_NAME);
+            printCliHelpMenu("ipk24chat");
             exit(EXIT_SUCCESS);
             break;
         case 't':
@@ -93,55 +89,6 @@ void processArguments(int argc, char* argv[], enum Protocols* prot, Buffer* ipAd
 // ----------------------------------------------------------------------------
 
 /**
- * @brief Updates values in CommunicationDetails comDetails variable
- * based on CommandType provided in ProgramBlocks.  
- * 
- * @note Stored data is copied, so commands can be safely rewritten
- * 
- * @param pBlocks Structure that holds separated commands and type
- * @param comDetails Pointer to the CommunicationDetails variable that will 
- * be updated
- */
-void storeInformation(ProtocolBlocks* pBlocks, CommunicationDetails* comDetails)
-{
-    
-    switch (uchar2CommandType(pBlocks->type))
-    {
-    case cmd_AUTH:
-        // commands: CMD, USERNAME, SECRET, DISPLAYNAME
-        bufferResize(&(comDetails->displayName), pBlocks->cmd_auth_displayname.len + 1);
-
-        stringReplace(  comDetails->displayName.data, 
-                        pBlocks->cmd_auth_displayname.start, 
-                        pBlocks->cmd_auth_displayname.len);
-
-        comDetails->displayName.data[pBlocks->cmd_auth_displayname.len] = '\0';
-        comDetails->displayName.used = pBlocks->cmd_auth_displayname.len;
-        break;
-    case cmd_JOIN:
-        // commands: CMD, CHANNELID
-        bufferResize(&(comDetails->channelID), pBlocks->cmd_join_channelID.len + 1);
-
-        stringReplace(  comDetails->channelID.data, 
-                        pBlocks->cmd_join_channelID.start, 
-                        pBlocks->cmd_join_channelID.len);
-        comDetails->channelID.used = pBlocks->cmd_join_channelID.len;
-        break;
-    case cmd_RENAME:
-        // commands: CMD, DISPLAYNAME
-        bufferResize(&(comDetails->displayName), pBlocks->cmd_rename_displayname.len + 1);
-        stringReplace(  comDetails->displayName.data, 
-                        pBlocks->cmd_rename_displayname.start, 
-                        pBlocks->cmd_rename_displayname.len);
-        comDetails->displayName.data[pBlocks->cmd_rename_displayname.len] = '\0';
-        comDetails->displayName.used = pBlocks->cmd_rename_displayname.len;
-        break;
-    default: break;
-    }
-}
-
-
-/**
  * @brief Filters commands by CommandType (cmd_t) and returns 
  * if they should be sended
  * 
@@ -159,6 +106,16 @@ bool filterCommandsByFSM(ProtocolBlocks* pBlocks, ProgramInterface* progInt, msg
     switch (uchar2CommandType(pBlocks->type))
     {
     case cmd_AUTH:
+        // commands: CMD, USERNAME, SECRET, DISPLAYNAME
+        bufferResize(&(progInt->comDetails->displayName), pBlocks->cmd_auth_displayname.len + 1);
+
+        stringReplace(  progInt->comDetails->displayName.data, 
+                        pBlocks->cmd_auth_displayname.start, 
+                        pBlocks->cmd_auth_displayname.len);
+
+        progInt->comDetails->displayName.used = pBlocks->cmd_auth_displayname.len;
+        progInt->comDetails->displayName.data[pBlocks->cmd_auth_displayname.len] = '\0';
+
         if( getProgramState(progInt) == fsm_START )
         {
             *flags = msg_flag_AUTH;
@@ -169,30 +126,52 @@ bool filterCommandsByFSM(ProtocolBlocks* pBlocks, ProgramInterface* progInt, msg
     case cmd_HELP:
         printUserHelpMenu(progInt);
         return false;
-    case cmd_RENAME:
-        // replace displayname stored in Communication Details with data 
-        // from user provided command
-        bufferResize(   &(progInt->comDetails->displayName), 
-                        pBlocks->cmd_rename_displayname.len + 1);
-        stringReplace(  progInt->comDetails->displayName.data, 
-                        pBlocks->cmd_rename_displayname.start, 
-                        pBlocks->cmd_rename_displayname.len);
-        progInt->comDetails->displayName.used = pBlocks->cmd_rename_displayname.len;
-        progInt->comDetails->displayName.data[progInt->comDetails->displayName.used] = 0;
-        return false;
-    default:
-        if( getProgramState(progInt) != fsm_OPEN)
-        {
-            safePrintStdout("System: You are not connected to server! "
-                "Use /auth to connect to server or /help for more information.\n"); 
-            return false;
-        }
-        return true;
         break;
+    case cmd_JOIN:
+        // can only be send in open state
+        if(getProgramState(progInt) == fsm_OPEN)
+        {
+            // commands: CMD, CHANNELID
+            bufferResize(&(progInt->comDetails->channelID), pBlocks->cmd_join_channelID.len + 1);
+
+            stringReplace(  progInt->comDetails->channelID.data, 
+                            pBlocks->cmd_join_channelID.start, 
+                            pBlocks->cmd_join_channelID.len);
+            progInt->comDetails->channelID.used = pBlocks->cmd_join_channelID.len;
+            progInt->comDetails->channelID.data[progInt->comDetails->channelID.used] = 0;
+            return true; // send join message
+        }
+        break;
+    case cmd_RENAME:
+        // can only be send in open state
+        if(getProgramState(progInt) == fsm_OPEN)
+        {
+            // replace displayname stored in Communication Details with data 
+            // from user provided command
+            bufferResize(   &(progInt->comDetails->displayName), 
+                            pBlocks->cmd_rename_displayname.len + 1);
+            stringReplace(  progInt->comDetails->displayName.data, 
+                            pBlocks->cmd_rename_displayname.start, 
+                            pBlocks->cmd_rename_displayname.len);
+            progInt->comDetails->displayName.used = pBlocks->cmd_rename_displayname.len;
+            progInt->comDetails->displayName.data[progInt->comDetails->displayName.used] = 0;
+            return false; // rename is local only, dont send
+        }
+        break;
+    case cmd_MSG:
+        if(getProgramState(progInt) == fsm_OPEN)
+        {
+            return true; // send message
+        }
+        break;;
+    case cmd_EXIT:
+        return true;
+    default: break;
     }
 
-    // should this message be not send?
-    return true;
+    safePrintStdout("System: You are not connected to server! "
+            "Use /auth to connect to server or /help for more information.\n"); 
+    return false;
 }
 
 // ----------------------------------------------------------------------------
@@ -212,7 +191,7 @@ void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
     // continue while continueProgram is true, only main id can go into this loop
     while (getProgramState(progInt) != fsm_END)
     {
-
+        debugPrint(stdout, "DEBUG: Main resumed\n");
         // --------------------------------------------------------------------
         // Convert user input into an protocol
         // --------------------------------------------------------------------
@@ -227,33 +206,34 @@ void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
 
         // Filter commands by type and FSM state
         canBeSended = filterCommandsByFSM(&pBlocks, progInt, &flags);
-        // if message should not be send skip it
+
+        // if message should not be send skip it because it is local only
         if(!canBeSended) { continue; }
-        // update stored information about communication 
-        storeInformation(&pBlocks, progInt->comDetails);
-        
+
         // Assembles array of bytes into Buffer protocolMsg, returns if 
         // message can be trasmitted
         canBeSended = assembleProtocol(&pBlocks, &protocolMsg, progInt);
 
-        if(canBeSended)
-        {
-            // add message to the queue
-            queueLock(progInt->threads->sendingQueue);
-
-            bool signalSender = false;
-            if(queueIsEmpty(progInt->threads->sendingQueue)) { signalSender = true; }
-            
-            queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags);
-            
-            // signal sender if he is waiting because queue is empty
-            if(signalSender)
-            {
-                pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
-            }
-            queueUnlock(progInt->threads->sendingQueue);
-        }
+        // if message wasnt assebled correcttly
+        if(!canBeSended) { continue; }
         
+        // add message to the queue
+        queueLock(progInt->threads->sendingQueue);
+
+        // if queue is empty store that sender should be signaled
+        bool signalSender = false;
+        if(queueIsEmpty(progInt->threads->sendingQueue)) { signalSender = true; }
+        
+        queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags);
+        
+        // signal sender if he is waiting because queue is empty
+        if(signalSender)
+        {
+            pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
+        }
+        queueUnlock(progInt->threads->sendingQueue);
+
+                    
         // Exit loop if /exit detected 
         if(pBlocks.type == cmd_EXIT)
         {
@@ -262,6 +242,10 @@ void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
             // wake up sender to exit
             pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
         }
+
+        debugPrint(stdout, "DEBUG: Main waiting\n");
+        // wait for message to be processed/confirmed
+        pthread_cond_wait(progInt->threads->mainCond, progInt->threads->mainMutex);
     }
 
     // free allocated memory
@@ -391,7 +375,7 @@ int main(int argc, char* argv[])
 
     // reuse ipAddress buffer which is already initialized and unused
     Buffer* clientInput = &ipAddress; 
-    
+
     userCommandHandling(progInt, clientInput);
 
     debugPrint(stdout, "DEBUG: Communicaton ended with %u messages\n", (comDetails.msgCounter - 1));

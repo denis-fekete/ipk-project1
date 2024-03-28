@@ -12,7 +12,7 @@ LDFLAGS := -lm -lpcap -lnet
 DEBUG_CFLAGS = -pthread -pedantic-errors -Wall -Wextra -Werror -g -DDEBUG
 RELEASE_CFLAGS = -pthread -pedantic-errors -Wall -Wextra -Werror
 
-ifeq ($(BUILD_TYPE),debug)
+ifeq ($(DEBUG),true)
 	CFLAGS = $(CVERSTION) $(DEBUG_CFLAGS) -I$(LIB_DIR)
 else
 	CFLAGS = $(CVERSTION) $(RELEASE_CFLAGS) -I$(LIB_DIR)

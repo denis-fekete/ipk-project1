@@ -27,8 +27,8 @@ typedef enum FSM {
     fsm_AUTH_W82_BE_SENDED, /*authentication is waiting(W8) to(2) be sended*/
     fsm_AUTH_SENDED, /*authetication was successfully sended*/
     fsm_W8_4_REPLY, /*auth has been confirmed, waiting for reply*/
+    fsm_W8_4_CONF, /*reply received, waiting for confirm to be sended*/
     fsm_OPEN, /*authetication was confirmed and replied to*/
-    fsm_OPEN_MSG_SEND,
     fsm_JOIN_ATEMPT, /*attempted to join another channale, wait for response*/
     fsm_EMPTY_Q_BYE, /*send all messages left in queue and then end*/
     fsm_BYE_RECV, /*bye was received, prepare to end program*/
