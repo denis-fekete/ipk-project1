@@ -212,6 +212,7 @@ void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
     // continue while continueProgram is true, only main id can go into this loop
     while (getProgramState(progInt) != fsm_END)
     {
+
         // --------------------------------------------------------------------
         // Convert user input into an protocol
         // --------------------------------------------------------------------
@@ -390,6 +391,7 @@ int main(int argc, char* argv[])
 
     // reuse ipAddress buffer which is already initialized and unused
     Buffer* clientInput = &ipAddress; 
+    
     userCommandHandling(progInt, clientInput);
 
     debugPrint(stdout, "DEBUG: Communicaton ended with %u messages\n", (comDetails.msgCounter - 1));

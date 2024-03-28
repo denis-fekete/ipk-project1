@@ -28,6 +28,8 @@ typedef enum FSM {
     fsm_AUTH_SENDED, /*authetication was successfully sended*/
     fsm_W8_4_REPLY, /*auth has been confirmed, waiting for reply*/
     fsm_OPEN, /*authetication was confirmed and replied to*/
+    fsm_OPEN_MSG_SEND,
+    fsm_JOIN_ATEMPT, /*attempted to join another channale, wait for response*/
     fsm_EMPTY_Q_BYE, /*send all messages left in queue and then end*/
     fsm_BYE_RECV, /*bye was received, prepare to end program*/
     fsm_ERR, 
@@ -185,7 +187,14 @@ uint16_t convert2BytesToU16Int(char high, char low);
     pthread_mutex_lock(progInt->threads->stdoutMutex);  \
     printf(__VA_ARGS__);                                \
     fflush(stdout);                                     \
-    pthread_mutex_unlock(progInt->threads->stdoutMutex);\
+    pthread_mutex_unlock(progInt->threads->stdoutMutex);
+
+
+#define safePrintStderr(...) \
+    pthread_mutex_lock(progInt->threads->stdoutMutex);  \
+    fprintf(stderr, __VA_ARGS__);                      \
+    fflush(stderr);                                     \
+    pthread_mutex_unlock(progInt->threads->stdoutMutex);
 
 #ifdef DEBUG
     extern pthread_mutex_t debugPrintMutex;

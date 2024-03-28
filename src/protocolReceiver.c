@@ -10,9 +10,16 @@
 #include "protocolReceiver.h"
 #include "sys/time.h"
 
-void assembleConfirmProtocol(Buffer* recvBuffer, Buffer* confirmBuffer, ProgramInterface* progInt)
+/**
+ * @brief Create confirm protocol
+ * 
+ * @param serverResponse Buffer from which will referenceID be taken
+ * @param confirmBuffer Buffer to which should message be stored
+ * @param progInt Pointer to Program Interface
+ */
+void sendConfirm(Buffer* serverResponse, Buffer* confirmBuffer, ProgramInterface* progInt)
 {
-    if(recvBuffer == NULL || confirmBuffer == NULL)
+    if(serverResponse == NULL || confirmBuffer == NULL)
     {
          errHandling("Invalid pointers passed as arguements for assembleConfirmProtocol()\n", 1); // TODO:
     }
@@ -20,10 +27,10 @@ void assembleConfirmProtocol(Buffer* recvBuffer, Buffer* confirmBuffer, ProgramI
     ProtocolBlocks pBlocks;
 
     // set commands values to received message id
-    pBlocks.cmd_conf_lowMsgID.start = &(recvBuffer->data[1]);
+    pBlocks.cmd_conf_lowMsgID.start = &(serverResponse->data[1]);
     pBlocks.cmd_conf_lowMsgID.len = 1;
 
-    pBlocks.cmd_conf_highMsgID.start = &(recvBuffer->data[2]);
+    pBlocks.cmd_conf_highMsgID.start = &(serverResponse->data[2]);
     pBlocks.cmd_conf_highMsgID.len = 1;
 
     pBlocks.second.start = NULL; pBlocks.second.len = 0;
@@ -35,11 +42,7 @@ void assembleConfirmProtocol(Buffer* recvBuffer, Buffer* confirmBuffer, ProgramI
     {
         errHandling("Assembling of confrim protocol failed\n", 1); // TODO:
     }
-}
 
-void sendConfirm(Buffer* serverResponse, Buffer* confirmBuffer, ProgramInterface* progInt)
-{
-    assembleConfirmProtocol(serverResponse, confirmBuffer, progInt);
 
     queueLock(progInt->threads->sendingQueue);
     queueAddMessagePriority(progInt->threads->sendingQueue, confirmBuffer, msg_flag_CONFIRM);
@@ -62,7 +65,7 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
 
     queueLock(confirmedMsgs);
     // if message id queue contains received message add it to it and prerform action
-    if(! queueContainsMessageId(confirmedMsgs, highMsgIDByte, lowMsgIDByte))
+    if( pBlocks->type != msg_CONF && !queueContainsMessageId(confirmedMsgs, highMsgIDByte, lowMsgIDByte))
     {
         queueAddMessageOnlyID(confirmedMsgs, serverResponse);
     }
@@ -120,25 +123,27 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
             // if it is repetitive message send confirm and do nothing
             if(repetitiveMsg)
             {
-                // sendConfirm(serverResponse, confirmBuffer, progInt);
+                sendConfirm(serverResponse, confirmBuffer, progInt);
                 debugPrint(stdout, "Repetetive reply received\n");
-                // return;
+                return;
             }
 
             replyResult = serverResponse->data[3];
-            debugPrint(stdout, "DEBUG: Reply message resuted in: %i\n", replyResult);
 
             // if waiting for authetication reply
-            if(getProgramState(progInt) == fsm_W8_4_REPLY)
+            if(getProgramState(progInt) == fsm_W8_4_REPLY || getProgramState(progInt) == fsm_JOIN_ATEMPT)
             {
                 // replty to auth is positive
                 if(replyResult == 1)
                 {
-                    // set auth message as confirmed
-                    queueLock(sendingQueue);
-                    queueSetMessageFlags(sendingQueue, msg_flag_CONFIRMED);
-                    queueUnlock(sendingQueue);
-
+                    // if auth
+                    if(getProgramState(progInt) == fsm_W8_4_REPLY)
+                    {
+                        // set auth message as confirmed
+                        queueLock(sendingQueue);
+                        queueSetMessageFlags(sendingQueue, msg_flag_CONFIRMED);
+                        queueUnlock(sendingQueue);
+                    }
                     // send confirm message
                     sendConfirm(serverResponse, confirmBuffer, progInt);
 
@@ -150,10 +155,11 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
                     pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
                     pthread_cond_signal(progInt->threads->rec2SenderCond);
 
+
+                    safePrintStderr("Success: %s\n", pBlocks->msg_reply_MsgContents.start);
                 }
                 else
                 {
-                    safePrintStdout("Server: %s\n", pBlocks->msg_reply_MsgContents.start);
 
                     queueLock(sendingQueue);
                     // check if top of queue is AUTH message, reject it
@@ -167,6 +173,8 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
                     queueUnlock(sendingQueue);
 
                     pthread_cond_signal(progInt->threads->rec2SenderCond);
+
+                    safePrintStderr("Failure: %s\n", pBlocks->msg_reply_MsgContents.start);
                 }
                 // increase counter of messages no matter the response/reply
                 progInt->comDetails->msgCounter = msgID + 1;
@@ -177,8 +185,9 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
             // if it is repetitive message send confirm and do nothing
             if(repetitiveMsg)
             {
+                sendConfirm(serverResponse, confirmBuffer, progInt);
                 debugPrint(stdout, "Repetetive message received\n");
-                // return;
+                return;
             }
 
             sendConfirm(serverResponse, confirmBuffer, progInt);
@@ -206,7 +215,8 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
             sendConfirm(serverResponse, confirmBuffer, progInt);
             // set staye to END
             setProgramState(progInt, fsm_END);
-            safePrintStdout("ERR FROM %s: %s\n", "0", "0"); // TODO:
+            safePrintStderr("ERR FROM %s: %s\n", pBlocks->msg_msg_displayname.start,
+                pBlocks->msg_err_MsgContents.start); // TODO:
         default: 
             break;
     }
@@ -301,29 +311,3 @@ void* protocolReceiver(void *vargp)
 
     return NULL;
 }
-
-
-
-    // TODO: DELETE
-    // #define MAX_EVENTS 3
-    // struct epoll_event event;
-    // struct epoll_event events[MAX_EVENTS];
-    // int epollFd = epoll_create1(0);
-    // event.events = EPOLLIN; //want to read
-    // event.data.fd = progInt->netConfig->openedSocket;
-
-/*
-// use macro for loop overhead because it would be too much tabulators
-#define LOOP_WITH_EPOLL_START \
-    do { \
-        epoll_ctl(epollFd, EPOLL_CTL_ADD, progInt->netConfig->openedSocket, &event);    \
-        int readySockets = epoll_wait(epollFd, events, MAX_EVENTS, 1);      \
-        if(readySockets){ }                                                 \
-        for(unsigned i = 0; i < MAX_EVENTS; i++) {                          \
-            if (events[i].events & EPOLLIN) {
-
-#define LOOP_WITH_EPOLL_END \
-            } \
-        } \
-    } while (progInt->threads->continueProgram);
-*/

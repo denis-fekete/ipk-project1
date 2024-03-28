@@ -52,6 +52,7 @@ void filterMessagesByFSM(ProgramInterface* progInt)
         // wait to prevent repetitive auth sending 
         else if(msgType == msg_AUTH && msgToBeSend->confirmed)
         {
+            debugPrint(stdout, "Message that is not auth blocked because of FSM state\n");
             queueUnlock(sendingQueue);
             // message was confirmed, wait for receiver to ping me   
             pthread_cond_wait(progInt->threads->rec2SenderCond, 
@@ -61,10 +62,18 @@ void filterMessagesByFSM(ProgramInterface* progInt)
         break;
     // ------------------------------------------------------------------------
     case fsm_OPEN:
-        if(msgType == msg_AUTH)
+        switch(msgType)
         {
-            safePrintStdout("System: You are already autheticated, message will be ignored.");
-            queuePopMessage(sendingQueue);
+            case msg_AUTH:
+                // TODO: look if okey with assigment
+                safePrintStdout("System: You are already autheticated, message will be ignored.");
+                queuePopMessage(sendingQueue);
+                break;
+            case msg_JOIN:
+                setProgramState(progInt, fsm_JOIN_ATEMPT);
+                break;
+            default:
+                break;
         }
         break;
     default:
@@ -162,7 +171,7 @@ void* protocolSender(void* vargp)
                 // bye was sended, end program
                 setProgramState(progInt, fsm_END);
                 queueUnlock(sendingQueue);
-                continue;
+                continue; // jump to while condition and end
             }
             else // else wait for someone to ping me
             {
