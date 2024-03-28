@@ -12,15 +12,7 @@
 
 #include "pthread.h"
 
-// #include "libs/customtypes.h"
-// #include "libs/buffer.h"
-// #include "libs/utils.h"
-// #include "libs/networkCom.h"
-// #include "libs/ipk24protocol.h"
-// #include "libs/msgQueue.h"
-
 #include "libs/ipk24protocol.h"
-
 
 void* protocolSender(void* vargp);
 

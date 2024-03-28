@@ -7,19 +7,7 @@
  * 
  */
 
-// #include "netinet/ether.h"
-// #include "netinet/tcp.h"
-// #include "netinet/udp.h"
-// #include "netinet/ip_icmp.h"
-
 #include "getopt.h" // argument processing
-
-// #include "libs/customtypes.h"
-// #include "libs/buffer.h"
-// #include "libs/utils.h"
-// #include "libs/networkCom.h"
-// #include "libs/msgQueue.h"
-// #include "libs/ipk24protocol.h"
 
 #include "protocolReceiver.h"
 #include "protocolSender.h"
@@ -48,7 +36,7 @@ void processArguments(int argc, char* argv[], enum Protocols* prot, Buffer* ipAd
         switch (opt)
         {
         case 'h':
-            printCliHelpMenu("ipk24chat");
+            printCliHelpMenu("ipk24chat-client");
             exit(EXIT_SUCCESS);
             break;
         case 't':
