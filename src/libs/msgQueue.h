@@ -51,7 +51,6 @@ typedef struct Message {
     union 
     {
         u_int8_t sendCount;
-        unsigned char type;
         unsigned char highMsgId; 
     };
     union 
@@ -60,7 +59,7 @@ typedef struct Message {
         unsigned char lowMsgId;
     };
     
-    
+    unsigned char type;
     msg_flags msgFlags;
 } Message;
 

@@ -43,7 +43,10 @@ void filterMessagesByFSM(ProgramInterface* progInt)
         // if program is not in open state and message to be send is not auth 
         if(msgType != msg_AUTH && flags != msg_flag_NOK_REPLY)
         {
-            debugPrint(stdout, "DEBUG: Message that is not auth blocked because of FSM state\n");
+            #ifdef DEBUG
+                debugPrint(stdout, "DEBUG: Message that is not auth blocked because of FSM state\n");
+                bufferPrint(msgToBeSend->buffer, 9);
+            #endif
             queueUnlock(sendingQueue);
             // wait for receiver to signal that authentication was confirmed
             pthread_cond_wait(progInt->threads->rec2SenderCond, 
@@ -52,10 +55,13 @@ void filterMessagesByFSM(ProgramInterface* progInt)
             queueLock(sendingQueue);
         }
         // if message is AUTH and was already confirmed, ...
-        // wait to prevent repetitive auth sending 
-        else if(msgType == msg_AUTH && msgToBeSend->confirmed)
+        // wait to prevent repetitive auth sending, and if message wasnt rejected
+        else if(msgType == msg_AUTH && msgToBeSend->confirmed && flags != msg_flag_REJECTED)
         {
-            debugPrint(stdout, "DEBUG: AUTH message blocked because of FSM state (state: %i)\n", getProgramState(progInt));
+            #ifdef DEBUG
+                debugPrint(stdout, "DEBUG: AUTH message blocked because of FSM state (state: %i)\n", getProgramState(progInt));
+                bufferPrint(msgToBeSend->buffer, 7);
+            #endif
             queueUnlock(sendingQueue);
             // message was confirmed, wait for receiver to ping me   
             pthread_cond_wait(progInt->threads->rec2SenderCond, 
@@ -136,6 +142,7 @@ void filterResentMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
             } else {
                 safePrintStdout("System: Request timed out. Last message was not sent.\n");   
                 debugPrint(stdout, "Count: %i\n", queueGetSendedCounter(sendingQueue));
+                bufferPrint(msgToBeSend->buffer, 1);
             }
         }
         else if(msgToBeSend->msgFlags == msg_flag_REJECTED)
@@ -253,14 +260,17 @@ void* protocolSender(void* vargp)
             errHandling("Sending bytes was not successful", 1); // TODO: change error code
         }
 
-        // if DO_NOT_RESEND flags is set, delete msg from queue right away
-        if(sendedMessageFlags == msg_flag_DO_NOT_RESEND || sendedMessageFlags == msg_flag_CONFIRM)
+        // pop messages that should not be resend again
+        switch (sendedMessageFlags)
         {
+        case msg_flag_DO_NOT_RESEND: /*general do not resend*/
+        case msg_flag_CONFIRM: /*confirm*/
+        case msg_flag_NOK_REPLY: /*confirm to bad reply*/
             queuePopMessage(sendingQueue);
-        }
-        else
-        {
+            break;
+        default: /*other: increase sended message counter*/
             queueMessageSended(sendingQueue);
+            break;
         }
 
         queueUnlock(sendingQueue);
