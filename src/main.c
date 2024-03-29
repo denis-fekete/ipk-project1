@@ -205,7 +205,6 @@ void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
             canBeSended = assembleProtocolUDP(&pBlocks, &protocolMsg, progInt);
         TCP_VARIANT
             canBeSended = assembleProtocolTCP(&pBlocks, &protocolMsg, progInt);
-            flags = msg_flag_DO_NOT_RESEND; // set do not resend to tcp messages
         END_VARIANTS
         // if message wasnt assebled correcttly
         if(!canBeSended) { continue; }
@@ -218,7 +217,7 @@ void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
         if(queueIsEmpty(progInt->threads->sendingQueue)) { signalSender = true; }
         
         queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags, pBlocks.type);
-        debugPrint(stdout, "DEBUG: Main added message to the queue\n");
+        debugPrint(stdout, "DEBUG: Main added message to the queue (flags: %i)\n", flags);
         // signal sender if he is waiting because queue is empty
         if(signalSender)
         {
@@ -228,7 +227,7 @@ void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
 
                     
         // Exit loop if /exit detected 
-        if(pBlocks.type == cmd_EXIT)
+        if(pBlocks.type == cmd_EXIT || pBlocks.type == msg_BYE)
         {
             // set state to empty queue, send bye and exit
             setProgramState(progInt, fsm_EMPTY_Q_BYE);
@@ -359,8 +358,6 @@ int main(int argc, char* argv[])
                     progInt->netConfig->serverAddress,
                     progInt->netConfig->serverAddressSize);
         if( res != 0 ) {
-            debugPrint(stdout, "res: %i, errno: %i, errmsg: %s\n", res, errno, strerror(errno));
-            
             errHandling("Failed to connect to the server", 1);
         } 
     END_VARIANTS

@@ -208,21 +208,6 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
 
         pBlocks->type = msg_AUTH;
         break;
-    case cmd_JOIN:
-        // check if displayname is stored
-        if(progInt->comDetails->displayName.data == NULL)
-        { 
-            safePrintStdout("System: Displayname not provided, cannot join! Use /help for help.\n");
-            return false; // message cannot be sent
-        }
-
-        ADD_STRING_TO_BUFFER(buffer->data[0], "JOIN ");
-        ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->channelID);
-        ADD_STRING_TO_BUFFER(buffer->data[ptrPos], " AS ");
-        ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->displayName);
-
-        pBlocks->type = msg_JOIN;
-        break;
     case cmd_MSG:
     case cmd_ERR: // err and msg are same
         // check if displayname is stored
@@ -245,8 +230,24 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         }
 
         ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->displayName);
-        ADD_STRING_TO_BUFFER(buffer->data[0], " IS ");
+        ADD_STRING_TO_BUFFER(buffer->data[ptrPos], " IS ");
         ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_msg_MsgContents);
+
+        break;
+    case cmd_JOIN:
+        // check if displayname is stored
+        if(progInt->comDetails->displayName.data == NULL)
+        { 
+            safePrintStdout("System: Displayname not provided, cannot join! Use /help for help.\n");
+            return false; // message cannot be sent
+        }
+
+        ADD_STRING_TO_BUFFER(buffer->data[0], "JOIN ");
+        ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->channelID);
+        ADD_STRING_TO_BUFFER(buffer->data[ptrPos], " AS ");
+        ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->displayName);
+
+        pBlocks->type = msg_JOIN;
         break;
     case cmd_EXIT:
         ADD_STRING_TO_BUFFER(buffer->data[0], "BYE");
@@ -258,7 +259,6 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
     }
     // \r and \n at the od of string, also add zerobyte
     ADD_STRING_TO_BUFFER(buffer->data[ptrPos], "\r\n");
-    ADD_ZERO_BYTE;
 
     buffer->used = ptrPos;
 

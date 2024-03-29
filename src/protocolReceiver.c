@@ -324,6 +324,9 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
                 default:
                     break;
                 }
+
+                // signal main that it can start working again
+                pthread_cond_signal(progInt->threads->mainCond);
             END_VARIANTS
            
             break;
@@ -362,7 +365,7 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
             END_VARIANTS
 
             // set staye to END
-            setProgramState(progInt, fsm_END);
+            setProgramState(progInt, fsm_BYE_RECV);
             // signal main to stop waiting
             pthread_cond_signal(progInt->threads->mainCond);
             break;

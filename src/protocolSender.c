@@ -25,22 +25,18 @@
  */
 void filterMessagesByFSM(ProgramInterface* progInt)
 {
-    debugPrint(stdout, "d.1\n"); //DEBUG:
     MessageQueue* sendingQueue = progInt->threads->sendingQueue;
 
     // get msg again in case someone changed first it ... this is primary 
     // for receiver importing priority messages like CONFIRM
     Message* msgToBeSend = queueGetMessage(sendingQueue); 
-    debugPrint(stdout, "d.1.0\n"); //DEBUG:
     debugPrint(stdout, "%p\n", (void*)msgToBeSend); //DEBUG:
     bufferPrint(msgToBeSend->buffer, 9);//DEBUG:
 
     msg_t msgType = queueGetMessageMsgType(sendingQueue);
     
-    debugPrint(stdout, "d.1.1\n"); //DEBUG:
     msg_flags flags = queueGetMessageFlags(sendingQueue);
 
-    debugPrint(stdout, "d.2\n"); //DEBUG:
     switch (getProgramState(progInt))
     {
     // ------------------ FSM IN BEFORE SUCCESSFULL AUTHENTICATION ------------
@@ -51,7 +47,6 @@ void filterMessagesByFSM(ProgramInterface* progInt)
         // if program is not in open state and message to be send is not auth 
         if(msgType != msg_AUTH && flags != msg_flag_NOK_REPLY)
         {
-            debugPrint(stdout, "d.3\n"); //DEBUG:
             #ifdef DEBUG
                 debugPrint(stdout, "DEBUG: Message that is not auth blocked because of FSM state\n");
                 debugPrint(stdout, "type: %i\n", msgType); //DEBUG:
@@ -68,7 +63,6 @@ void filterMessagesByFSM(ProgramInterface* progInt)
         // wait to prevent repetitive auth sending, and if message wasnt rejected
         else if(msgType == msg_AUTH && msgToBeSend->confirmed && flags != msg_flag_REJECTED)
         {
-            debugPrint(stdout, "d.4\n"); //DEBUG:
             #ifdef DEBUG
                 debugPrint(stdout, "DEBUG: AUTH message blocked because of FSM state (state: %i)\n", getProgramState(progInt));
                 bufferPrint(msgToBeSend->buffer, 7);
@@ -84,7 +78,6 @@ void filterMessagesByFSM(ProgramInterface* progInt)
         break;
     // ------------------------------------------------------------------------
     case fsm_W84_REPLY_CONF: /*reply received, waiting for confirm to be sended*/
-        debugPrint(stdout, "d.5\n"); //DEBUG:
         // if message to be send is confirm
         if(msgType == msg_CONF)
         {
@@ -95,7 +88,6 @@ void filterMessagesByFSM(ProgramInterface* progInt)
         }
         break;
     case fsm_OPEN:
-        debugPrint(stdout, "d.6\n"); //DEBUG:
         switch(msgType)
         {
             case msg_AUTH:
@@ -104,7 +96,10 @@ void filterMessagesByFSM(ProgramInterface* progInt)
                 queuePopMessage(sendingQueue);
                 break;
             case msg_JOIN:
-                setProgramState(progInt, fsm_JOIN_ATEMPT);
+                UDP_VARIANT
+                    setProgramState(progInt, fsm_JOIN_ATEMPT);
+                TCP_VARIANT
+                END_VARIANTS
                 break;
             default:
                 break;
@@ -237,7 +232,6 @@ void* protocolSender(void* vargp)
             }
         }
         
-        debugPrint(stdout, "d\n");
         // make room for someone who is waiting
         queueUnlock(sendingQueue);
 
@@ -248,56 +242,65 @@ void* protocolSender(void* vargp)
         queueLock(sendingQueue);
 
         filterMessagesByFSM(progInt);
-        debugPrint(stdout, "e\n");
 
         Message* msgToBeSend = queueGetMessage(sendingQueue);
 
-        debugPrint(stdout, "f\n");
         // --------------------------------------------------------------------
         // Send message
         // --------------------------------------------------------------------
 
-        // set correct message id right before sending it
-        queueSetMessageID(sendingQueue, progInt);
+        // in udp variant messages must be label with correct message id
+        UDP_VARIANT
+            // set correct message id right before sending it
+            queueSetMessageID(sendingQueue, progInt);
+        END_VARIANTS
 
         #ifdef DEBUG
             debugPrint(stdout, "DEBUG: Sender (queue len: %li): ", sendingQueue->len);
             bufferPrint(msgToBeSend->buffer, 3);
         #endif
 
-        debugPrint(stdout, "g\n");
         int bytesTx; // number of sended bytes
         // send buffer to the server 
         bytesTx = sendto(progInt->netConfig->openedSocket, msgToBeSend->buffer->data, 
                         msgToBeSend->buffer->used, flags, progInt->netConfig->serverAddress, 
                         progInt->netConfig->serverAddressSize);
 
-        debugPrint(stdout, "h\n");
         // store sended messeges's flags
         msg_flags sendedMessageFlags = queueGetMessageFlags(sendingQueue);
 
-        debugPrint(stdout, "i\n");
         if(bytesTx < 0)
         {
             errHandling("Sending bytes was not successful", 1); // TODO: change error code
         }
 
-        // pop messages that should not be resend again
-        switch (sendedMessageFlags)
-        {
-        case msg_flag_DO_NOT_RESEND: /*general do not resend*/
-        case msg_flag_CONFIRM: /*confirm*/
-        case msg_flag_NOK_REPLY: /*confirm to bad reply*/
+        UDP_VARIANT
+            // pop messages that should not be resend again
+            switch (sendedMessageFlags)
+            {
+            case msg_flag_DO_NOT_RESEND: /*general do not resend*/
+            case msg_flag_CONFIRM: /*confirm*/
+            case msg_flag_NOK_REPLY: /*confirm to bad reply*/
+                queuePopMessage(sendingQueue);
+                break;
+            default: /*other: increase sended message counter*/
+                queueMessageSended(sendingQueue);
+                break;
+            }
+        TCP_VARIANT
+            // in tcp variant always pop message
             queuePopMessage(sendingQueue);
-            break;
-        default: /*other: increase sended message counter*/
-            queueMessageSended(sendingQueue);
-            break;
-        }
+            // if it was message, signal main
+            if(msgToBeSend->type == msg_MSG)
+            {
+                debugPrint(stdout, "DEBUG: MSG Send, waking main\n");
+                // ping main to work again
+                pthread_cond_signal(progInt->threads->mainCond);
+            }
+        END_VARIANTS
 
         queueUnlock(sendingQueue);
 
-        debugPrint(stdout, "j\n");
         
         // --------------------------------------------------------------------
         // Update FSM
@@ -321,7 +324,6 @@ void* protocolSender(void* vargp)
             break;
         }
 
-        debugPrint(stdout, "k\n");
         // After message has been sended wait udpTimeout time until 
         // attempting to resend it / again
         // only receiver can signal sender from this state
