@@ -452,7 +452,12 @@ void queueSetMessageFlags(MessageQueue* queue, msg_flags newFlag)
  */
 msg_t queueGetMessageMsgType(MessageQueue* queue)
 {
-    return ( (enum MessageType) queue->first->buffer->data[CMD_BYTE_POSITION] );
+    if(queue != NULL && queue->first != NULL)
+    {
+        return (enum MessageType) queue->first->type;
+    }
+
+    return msg_UNKNOWN;
 }
 
 // ----------------------------------------------------------------------------

@@ -23,7 +23,7 @@ int getSocket(enum Protocols protocol)
         default: errHandling("Unknown protocol passed to function get socket", -1); 
     }
 
-    int newSocket = socket(family, AF_INET, 0);
+    int newSocket = socket(AF_INET, family, 0);
     if(newSocket < 0) { errHandling("Socket creation failed", 1); /*TODO:*/ }
 
     return newSocket;

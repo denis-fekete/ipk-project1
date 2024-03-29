@@ -205,6 +205,8 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_auth_displayname);
         ADD_STRING_TO_BUFFER(buffer->data[ptrPos], " USING ");
         ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_auth_secret);
+
+        pBlocks->type = msg_AUTH;
         break;
     case cmd_JOIN:
         // check if displayname is stored
@@ -218,6 +220,8 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->channelID);
         ADD_STRING_TO_BUFFER(buffer->data[ptrPos], " AS ");
         ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->displayName);
+
+        pBlocks->type = msg_JOIN;
         break;
     case cmd_MSG:
     case cmd_ERR: // err and msg are same
@@ -230,9 +234,15 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         }
 
         if(uchar2CommandType(pBlocks->type) == cmd_MSG)
-            { ADD_STRING_TO_BUFFER(buffer->data[0], "MSG FROM "); }
+        {
+            ADD_STRING_TO_BUFFER(buffer->data[0], "MSG FROM ");
+            pBlocks->type = msg_MSG;
+        }
         else
-            { ADD_STRING_TO_BUFFER(buffer->data[0], "ERR FROM "); }
+        { 
+            ADD_STRING_TO_BUFFER(buffer->data[0], "ERR FROM ");
+            pBlocks->type = msg_ERR;
+        }
 
         ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->displayName);
         ADD_STRING_TO_BUFFER(buffer->data[0], " IS ");
@@ -240,6 +250,7 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         break;
     case cmd_EXIT:
         ADD_STRING_TO_BUFFER(buffer->data[0], "BYE");
+        pBlocks->type = msg_BYE;
         break;
     default: 
         errHandling("Unknown command type in assembleProtocolUDP() function", 1); /*TODO: change error code*/
@@ -248,6 +259,8 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
     // \r and \n at the od of string, also add zerobyte
     ADD_STRING_TO_BUFFER(buffer->data[ptrPos], "\r\n");
     ADD_ZERO_BYTE;
+
+    buffer->used = ptrPos;
 
     return true;
 }

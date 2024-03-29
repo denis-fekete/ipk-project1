@@ -11,6 +11,7 @@
 
 #include "protocolReceiver.h"
 #include "protocolSender.h"
+#include "errno.h"
 
 #ifdef DEBUG
     // global variable for printing to debug, only if DEBUG is defined
@@ -201,10 +202,10 @@ void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
         // Assembles array of bytes into Buffer protocolMsg, returns if 
         // message can be trasmitted
         UDP_VARIANT
-        canBeSended = assembleProtocolUDP(&pBlocks, &protocolMsg, progInt);
+            canBeSended = assembleProtocolUDP(&pBlocks, &protocolMsg, progInt);
         TCP_VARIANT
-        canBeSended = assembleProtocolTCP(&pBlocks, &protocolMsg, progInt);
-        flags = msg_flag_DO_NOT_RESEND; // set do not resend to tcp messages
+            canBeSended = assembleProtocolTCP(&pBlocks, &protocolMsg, progInt);
+            flags = msg_flag_DO_NOT_RESEND; // set do not resend to tcp messages
         END_VARIANTS
         // if message wasnt assebled correcttly
         if(!canBeSended) { continue; }
@@ -217,7 +218,7 @@ void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
         if(queueIsEmpty(progInt->threads->sendingQueue)) { signalSender = true; }
         
         queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags, pBlocks.type);
-        
+        debugPrint(stdout, "DEBUG: Main added message to the queue\n");
         // signal sender if he is waiting because queue is empty
         if(signalSender)
         {
@@ -350,6 +351,19 @@ int main(int argc, char* argv[])
     // get server address
     progInt->netConfig->serverAddress = (struct sockaddr*) &address;
     progInt->netConfig->serverAddressSize = sizeof(address);
+
+    UDP_VARIANT
+
+    TCP_VARIANT
+        const int res = connect( progInterface.netConfig->openedSocket, 
+                    progInt->netConfig->serverAddress,
+                    progInt->netConfig->serverAddressSize);
+        if( res != 0 ) {
+            debugPrint(stdout, "res: %i, errno: %i, errmsg: %s\n", res, errno, strerror(errno));
+            
+            errHandling("Failed to connect to the server", 1);
+        } 
+    END_VARIANTS
 
     // ------------------------------------------------------------------------
     // Setup second thread that will handle data receiving
