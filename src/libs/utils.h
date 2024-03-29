@@ -26,8 +26,8 @@ typedef enum FSM {
     fsm_START, 
     fsm_AUTH_W82_BE_SENDED, /*authentication is waiting(W8) to(2) be sended*/
     fsm_AUTH_SENDED, /*authetication was successfully sended*/
-    fsm_W8_4_REPLY, /*auth has been confirmed, waiting for reply*/
-    fsm_W8_4_CONF, /*reply received, waiting for confirm to be sended*/
+    fsm_W84_REPLY, /*auth has been confirmed, waiting for reply*/
+    fsm_W84_REPLY_CONF, /*reply received, waiting for confirm to be sended*/
     fsm_OPEN, /*authetication was confirmed and replied to*/
     fsm_JOIN_ATEMPT, /*attempted to join another channale, wait for response*/
     fsm_EMPTY_Q_BYE, /*send all messages left in queue and then end*/
@@ -42,7 +42,8 @@ typedef enum CommandType {
     cmd_RENAME, 
     cmd_HELP, 
     cmd_CONF, 
-    cmd_MSG, 
+    cmd_MSG,
+    cmd_ERR,
     cmd_EXIT, 
     cmd_NONE,
     cmd_CONVERSION_ERR
@@ -212,5 +213,9 @@ uint16_t convert2BytesToU16Int(char high, char low);
     #define debugPrint(...) ;
     #define debugPrintSeparator(fs) ;
 #endif
+
+#define UDP_VARIANT if(progInt->netConfig->protocol == prot_UDP) {
+#define TCP_VARIANT } else if(progInt->netConfig->protocol == prot_TCP) {
+#define END_VARIANTS }
 
 #endif /*UTILS_H*/

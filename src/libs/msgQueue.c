@@ -127,8 +127,9 @@ Message* createMessage(Buffer* buffer, msg_flags msgFlags)
  * 
  * @param queue MessageQueue to which will the new message be added
  * @param buffer is and input buffer from which the new message will be created
+ * @param cmdType type of command to be set to the message
  */
-void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags)
+void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags, unsigned char cmdType)
 {
     Message* newMessage = createMessage(buffer, msgFlags);
 
@@ -142,6 +143,9 @@ void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags)
 
     // set new message's behindMe value to NULL
     queue->last->behindMe = NULL;
+
+    // set message type if TCP, if UDP this will be overwritten
+    newMessage->type = cmdType;
     // increase queue size
     queue->len += 1;
 }

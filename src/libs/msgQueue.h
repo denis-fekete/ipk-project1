@@ -24,6 +24,7 @@ typedef struct ProgramInterface ProgramInterface; // declare that ProgramInterfa
 typedef enum MessageFlags {
     msg_flag_NONE, 
     msg_flag_DO_NOT_RESEND, 
+    msg_flag_NOK_REPLY,
     msg_flag_AUTH, 
     msg_flag_REJECTED, /*auth was rejected*/
     msg_flag_CONFIRMED, /*auth was confirmed*/
@@ -50,6 +51,7 @@ typedef struct Message {
     union 
     {
         u_int8_t sendCount;
+        unsigned char type;
         unsigned char highMsgId; 
     };
     union 
@@ -135,8 +137,9 @@ Message* createMessage(Buffer* buffer, msg_flags msgFlags);
  * 
  * @param queue MessageQueue to which will the new message be added
  * @param buffer is and input buffer from which the new message will be created
+ * @param cmdType type of command to be set to the message
  */
-void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags);
+void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags, unsigned char cmdType);
 
 /**
  * @brief Adds new message to the queue at the start

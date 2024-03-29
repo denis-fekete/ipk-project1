@@ -15,17 +15,15 @@
 
 #define ADD_BLOCK_TO_BUFFER(dst, src)           \
     stringReplace(&(dst), src.start, src.len);  \
-    ptrPos += src.len;                          \
-    /*add to zero byte*/                        \
-    buffer->data[ptrPos] = 0;                   \
+    ptrPos += src.len;
+
+#define ADD_ZERO_BYTE           \
+    buffer->data[ptrPos] = 0;   \
     ptrPos += 1;
 
 #define ADD_STORED_INFO_TO_BUFFER(dst, src)     \
     stringReplace(&(dst), src.data, src.used);  \
     ptrPos += src.used;                         \
-    /*add to zero byte*/                        \
-    buffer->data[ptrPos] = 0;                   \
-    ptrPos += 1;
 
 /**
  * @brief Assembles protocol from commands and command type into a buffer
@@ -37,8 +35,9 @@
  * 
  * @return Returns true if buffer can be sended to the server
  */
-bool assembleProtocol(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterface* progInt)
+bool assembleProtocolUDP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterface* progInt)
 {
+
     // calculate expected size and resize buffer accordingly, +10 is overhead for zeroing bytes, msgID, type etc...
     size_t expectedSize = pBlocks->zeroth.len + pBlocks->first.len
                         + pBlocks->second.len + pBlocks->third.len + 10;
@@ -74,7 +73,7 @@ bool assembleProtocol(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterface*
         buffer->used = 3;
         return true; // message can be send to server
         break;
-    default: errHandling("Unknown command type in assembleProtocol() function", 1) /*TODO: change error code*/; break;
+    default: errHandling("Unknown command type in assembleProtocolUDP() function", 1) /*TODO: change error code*/; break;
     }
 
     // resize buffer to needed size, again because of join/msg
@@ -92,11 +91,15 @@ bool assembleProtocol(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterface*
     {
     case cmd_AUTH:
         ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_auth_username);
+        ADD_ZERO_BYTE;
         ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_auth_displayname);
+        ADD_ZERO_BYTE;
         ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_auth_secret);
+        ADD_ZERO_BYTE;
         break;
     case cmd_JOIN:
         ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_join_channelID);
+        ADD_ZERO_BYTE;
         // check if displayname is stored
         if(progInt->comDetails->displayName.data == NULL)
         { 
@@ -105,8 +108,10 @@ bool assembleProtocol(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterface*
         }
         
         ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->displayName);
+        ADD_ZERO_BYTE;
         break;
     case cmd_MSG:
+    case cmd_ERR: // err is same as msg
         // check if displayname is stored
         if(progInt->comDetails->displayName.data == NULL)
             { 
@@ -116,13 +121,13 @@ bool assembleProtocol(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterface*
             }
         stringReplace(&(buffer->data[ptrPos]), progInt->comDetails->displayName.data, progInt->comDetails->displayName.used);
         ptrPos += progInt->comDetails->displayName.used;
-        buffer->data[ptrPos] = 0;
-        ptrPos += 1;
+        ADD_ZERO_BYTE;
         // ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->displayName);
         ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_msg_MsgContents);
+        ADD_ZERO_BYTE;
         break;
     default:
-        errHandling("Unknown CommandType in assembleProtocol()\n", 1); // TODO:
+        errHandling("Unknown CommandType in assembleProtocolUDP()\n", 1); // TODO:
         break;
     }
 
@@ -132,23 +137,138 @@ bool assembleProtocol(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterface*
 }
 #undef BLOCK_TO_BUFF
 
+#define ADD_STRING_TO_BUFFER(dst, string)   \
+    stringReplace(&(dst), string, sizeof(string) - 1); /*-1 to not include \0*/ \
+    ptrPos += sizeof(string) - 1;
+
+/**
+ * @brief Assembles protocol from commands and command type into a buffer in
+ * TCP format
+ * 
+ * @param pBlocks Separated commands and values from user input
+ * @param buffer Output buffer to be trasmited to the server
+ * that don't have all informations provided by user at start
+ * @param progInt Pointer to ProgramInterface
+ * 
+ * @return Returns true if buffer can be sended to the server
+ */
+bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterface* progInt)
+{
+    // calculate expected size and resize buffer accordingly, +1 zero byte.
+    size_t expectedSize = pBlocks->zeroth.len + pBlocks->first.len
+                        + pBlocks->second.len + pBlocks->third.len + 1;
+
+    // resize buffer to needed size
+    bufferResize(buffer, expectedSize);
+
+    switch (uchar2CommandType(pBlocks->type))
+    {
+    case cmd_AUTH:
+        // expectedSize += sizeof("AUTH ") - 1;
+        // expectedSize += sizeof(" AS ") - 1;
+        // expectedSize += sizeof(" USING ") -1;
+        expectedSize += 5 + 4 + 7;
+        break;
+    case cmd_JOIN:
+        // expectedSize += sizeof("JOIN ") -1;
+        // expectedSize += sizeof(" AS ") -1;
+        expectedSize += 5 + 4;
+        break;
+    case cmd_MSG:
+    case cmd_ERR: // err and message are same
+        // expectedSize += sizeof("MSG FROM ") -1;
+        // expectedSize += sizeof("ERR FROM ") -1;
+        // expectedSize += sizeof(" IS ") -1;
+        expectedSize += 9 + 4; 
+        break;
+    case cmd_EXIT:
+        // expectedSize += sizeof("BYE") -1;
+        expectedSize += 3;
+        break;
+    default: 
+        errHandling("Unknown command type in assembleProtocolUDP() function", 1); /*TODO: change error code*/
+        break;
+    }
+    // expectedSize += sizeof('\r') + sizeof('\n') -2;
+    expectedSize += 2; // "\r\n"
+
+    // resize buffer to needed size
+    bufferResize(buffer, expectedSize);
+    size_t ptrPos = 0;
+
+    switch (uchar2CommandType(pBlocks->type))
+    {
+    case cmd_AUTH:
+        ADD_STRING_TO_BUFFER(buffer->data[0], "AUTH ");
+        ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_auth_username);
+        ADD_STRING_TO_BUFFER(buffer->data[ptrPos], " AS ");
+        ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_auth_displayname);
+        ADD_STRING_TO_BUFFER(buffer->data[ptrPos], " USING ");
+        ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_auth_secret);
+        break;
+    case cmd_JOIN:
+        // check if displayname is stored
+        if(progInt->comDetails->displayName.data == NULL)
+        { 
+            safePrintStdout("System: Displayname not provided, cannot join! Use /help for help.\n");
+            return false; // message cannot be sent
+        }
+
+        ADD_STRING_TO_BUFFER(buffer->data[0], "JOIN ");
+        ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->channelID);
+        ADD_STRING_TO_BUFFER(buffer->data[ptrPos], " AS ");
+        ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->displayName);
+        break;
+    case cmd_MSG:
+    case cmd_ERR: // err and msg are same
+        // check if displayname is stored
+        if(progInt->comDetails->displayName.data == NULL)
+            { 
+                safePrintStdout("System: ChannelID not provided, cannot rename!"
+                    "(Did you use /auth before this commands?). Use /help for help.\n");
+                return false; // TODO: check what  to do in this state
+        }
+
+        if(uchar2CommandType(pBlocks->type) == cmd_MSG)
+            { ADD_STRING_TO_BUFFER(buffer->data[0], "MSG FROM "); }
+        else
+            { ADD_STRING_TO_BUFFER(buffer->data[0], "ERR FROM "); }
+
+        ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->displayName);
+        ADD_STRING_TO_BUFFER(buffer->data[0], " IS ");
+        ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_msg_MsgContents);
+        break;
+    case cmd_EXIT:
+        ADD_STRING_TO_BUFFER(buffer->data[0], "BYE");
+        break;
+    default: 
+        errHandling("Unknown command type in assembleProtocolUDP() function", 1); /*TODO: change error code*/
+        break;
+    }
+    // \r and \n at the od of string, also add zerobyte
+    ADD_STRING_TO_BUFFER(buffer->data[ptrPos], "\r\n");
+    ADD_ZERO_BYTE;
+
+    return true;
+}
+
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
 
 
-#define BBLOCK_END(block) &(block.start[block.len]);
-#define BBLOCK_END_W_ZERO_BYTE(block) &(block.start[block.len + 1]);
+#define BBLOCK_END(block) &(block.start[block.len])
+#define BBLOCK_END_W_ZERO_BYTE(block) &(block.start[block.len + 1])
 #define TYPE_ID_LEN 3
 
 /**
  * @brief Dissassembles protocol from Buffer into commands, msgType and msgId
- * 
+ * for UDP variant
  * @param buffer Input buffer containing message
  * @param pBlocks Separated commands and values from user input
  * @param msgId Detected message ID 
  */
-void disassebleProtocol(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* msgId)
+bool disassebleProtocolUDP(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* msgId)
 {
     size_t index; // Temporaty helping variable to hold index in string
 
@@ -212,7 +332,7 @@ void disassebleProtocol(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* msgId
         pBlocks->zeroth.len = index;
 
         // MSG, ERR: MessageContents (x bytes) / cmd_JOIN: DisplayName (x bytes) 
-        pBlocks->first.start = BBLOCK_END_W_ZERO_BYTE(pBlocks->zeroth) // skip one zero byte
+        pBlocks->first.start = BBLOCK_END_W_ZERO_BYTE(pBlocks->zeroth); // skip one zero byte
         index = findZeroInString(pBlocks->first.start, buffer->used 
             - (TYPE_ID_LEN + pBlocks->zeroth.len));
 
@@ -224,11 +344,124 @@ void disassebleProtocol(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* msgId
         debugPrint(stdout, "Unknown message type: %i\n", (int)pBlocks->type);
         errHandling("ERROR: Protocol disassembler received unknown message type", 1); // TODO:change
     }
+
+    return true;
 }
+
+#define MSG_FROM_TEXT "MSG FROM "
+#define IS_TEXT " IS "
+#define REPLY_TEXT "REPLY "
+#define REPLY_OK_TEXT "OK IS "
+#define REPLY_NOK_TEXT "NOK IS "
+#define BYE_TEXT "BYE"
+#define ERR_FROM_TEXT "ERR FROM"
+
+#define LEN_OF(constString) (sizeof(constString) - 1)
+/**
+ * @brief Dissassembles protocol from Buffer into commands, msgType and msgId
+ * for TCP variant
+ * @param buffer Input buffer containing message
+ * @param pBlocks Separated commands and values from user input
+ * @param msgId Detected message ID 
+ */
+bool disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks)
+{
+    size_t index;
+
+    if ( strncmp(buffer->data, MSG_FROM_TEXT, LEN_OF(MSG_FROM_TEXT)) == 0 )
+    {
+        // find end of displayname after sizeof("MSG FROM ") =  len: 9 (\0 not counted)
+        pBlocks->msg_msg_displayname.start = &(buffer->data[LEN_OF(MSG_FROM_TEXT)]);
+        index = findBlankCharInString(pBlocks->msg_msg_displayname.start, buffer->used - LEN_OF(MSG_FROM_TEXT));
+        pBlocks->msg_msg_displayname.len = index;
+        
+        // check if there is " IS " correctly typed after {displayname}
+        if(strncmp(BBLOCK_END(pBlocks->msg_msg_displayname), IS_TEXT, LEN_OF(IS_TEXT)) != 0)
+        {
+            return false;
+        }
+
+        // find end of message contents
+        pBlocks->msg_msg_MsgContents.start = BBLOCK_END(pBlocks->msg_msg_displayname);
+        index = findBlankCharInString(pBlocks->msg_msg_MsgContents.start, 
+            buffer->used - LEN_OF(MSG_FROM_TEXT) - pBlocks->msg_msg_displayname.len);
+            
+        pBlocks->msg_msg_MsgContents.len = index;
+        pBlocks->type = msg_MSG;
+    }
+    else if ( strncmp(buffer->data, REPLY_TEXT, LEN_OF(REPLY_TEXT)) == 0 )
+    {
+        // store result of reply
+        pBlocks->msg_reply_result.start = &(buffer->data[LEN_OF(REPLY_TEXT)]); 
+        if(strncmp(pBlocks->msg_reply_result.start,
+            REPLY_OK_TEXT, LEN_OF(REPLY_OK_TEXT)) == 0)
+        {
+            pBlocks->msg_reply_result.len = 2;
+            pBlocks->msg_reply_result_bool = true; 
+        } 
+        else if(strncmp(&(buffer->data[LEN_OF(REPLY_TEXT)]), 
+            REPLY_NOK_TEXT, LEN_OF(REPLY_NOK_TEXT)) == 0)
+        {
+            pBlocks->msg_reply_result.len = 3;
+            pBlocks->msg_reply_result_bool = false; 
+
+        }
+        else { return false; }
+
+        // find end of message contents after sizeof("{RESULT} IS "), + sizeof(" IS ") = len: 4 (\0 not counted)
+        pBlocks->msg_reply_MsgContents.start = 
+            &(pBlocks->msg_reply_result.start
+                [pBlocks->msg_reply_result.len + LEN_OF(IS_TEXT)]);
+
+        index = findBlankCharInString(pBlocks->msg_reply_MsgContents.start, buffer->used - 
+            (LEN_OF(REPLY_TEXT) + pBlocks->msg_reply_result.len) );
+
+        // set start of msgContents right after "{RESULT} IS "
+        pBlocks->msg_reply_MsgContents.len = index;
+        pBlocks->type = msg_REPLY;
+    }
+    else if ( strncmp(buffer->data, BYE_TEXT, LEN_OF(BYE_TEXT)) == 0 )
+    {
+        pBlocks->type = msg_BYE;
+    }
+    else if ( strncmp(buffer->data, ERR_FROM_TEXT, LEN_OF(ERR_FROM_TEXT)) == 0 )
+    {
+        // find end of displayname after sizeof("MSG FROM ") =  len: 9 (\0 not counted)
+        pBlocks->msg_err_displayname.start = &(buffer->data[LEN_OF(MSG_FROM_TEXT)]);
+        index = findBlankCharInString(pBlocks->msg_err_displayname.start, buffer->used - LEN_OF(MSG_FROM_TEXT));
+        pBlocks->msg_err_displayname.len = index;
+        
+        // check if there is " IS " correctly typed after {displayname}
+        if(strncmp(BBLOCK_END(pBlocks->msg_err_displayname), IS_TEXT, LEN_OF(IS_TEXT)) != 0)
+        {
+            return false;
+        }
+
+        // find end of message contents
+        pBlocks->msg_err_MsgContents.start = BBLOCK_END(pBlocks->msg_err_displayname);
+        index = findBlankCharInString(pBlocks->msg_err_MsgContents.start, 
+            buffer->used - LEN_OF(MSG_FROM_TEXT) - pBlocks->msg_err_displayname.len);
+            
+        pBlocks->msg_err_MsgContents.len = index;
+        pBlocks->type = msg_MSG;
+    }
+    else
+    {
+        errHandling("Unknown received message", 1); //TODO:
+    }
+
+    return true;
+}
+
+#undef MSG_FROM_TEXT
+#undef IS_TEXT
+#undef REPLY_TEXT
+#undef REPLY_OK_TEXT
+#undef REPLY_NOK_TEXT
+#undef BYE_TEXT
+#undef ERR_FROM_TEXT
 #undef BBLOCK_END
 #undef BBLOCK_END_W_ZERO_BYTE
-
-
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------

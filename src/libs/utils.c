@@ -11,7 +11,7 @@
 
 int errHandling(const char* msg, int errorCode)
 {
-    fprintf(stderr, "ERROR: %s\n", msg);
+    fprintf(stderr, "ERR: %s\n", msg);
     exit(errorCode);
     return 0;
 }
@@ -76,7 +76,9 @@ long findBlankCharInString(char* string, size_t len)
     size_t index = 0;
     for(; index <= len ; index++)
     {
-        if(string[index] == ' ' || string[index] == '\t' || string[index] == '\0' || string[index] == '\n')
+        if( string[index] == ' ' || string[index] == '\t' || 
+            string[index] == '\0' || string[index] == '\n' ||
+            string[index] == '\r')
         { 
             return index;
         }

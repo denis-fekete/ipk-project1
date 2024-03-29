@@ -31,6 +31,7 @@ void filterMessagesByFSM(ProgramInterface* progInt)
     // for receiver importing priority messages like CONFIRM
     Message* msgToBeSend = queueGetMessage(sendingQueue); 
     msg_t msgType = queueGetMessageMsgType(sendingQueue);
+    msg_flags flags = queueGetMessageFlags(sendingQueue);
 
     switch (getProgramState(progInt))
     {
@@ -38,9 +39,9 @@ void filterMessagesByFSM(ProgramInterface* progInt)
     case fsm_START:
     case fsm_AUTH_W82_BE_SENDED: /*authentication is waiting(W8) to(2) be sended*/
     case fsm_AUTH_SENDED: /*authetication was successfully sended*/
-    case fsm_W8_4_REPLY: /*auth has been confirmed, waiting for reply*/
+    case fsm_W84_REPLY: /*auth has been confirmed, waiting for reply*/
         // if program is not in open state and message to be send is not auth 
-        if(msgType != msg_AUTH)
+        if(msgType != msg_AUTH && flags != msg_flag_NOK_REPLY)
         {
             debugPrint(stdout, "DEBUG: Message that is not auth blocked because of FSM state\n");
             queueUnlock(sendingQueue);
@@ -65,7 +66,7 @@ void filterMessagesByFSM(ProgramInterface* progInt)
         }
         break;
     // ------------------------------------------------------------------------
-    case fsm_W8_4_CONF: /*reply received, waiting for confirm to be sended*/
+    case fsm_W84_REPLY_CONF: /*reply received, waiting for confirm to be sended*/
         // if message to be send is confirm
         if(msgType == msg_CONF)
         {
@@ -122,8 +123,8 @@ void filterResentMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
                 case fsm_START:
                 case fsm_AUTH_W82_BE_SENDED: /*authentication is waiting(W8) to(2) be sended*/
                 case fsm_AUTH_SENDED: /*authetication was successfully sended*/
-                case fsm_W8_4_REPLY: /*auth has been confirmed, waiting for reply*/
-                case fsm_W8_4_CONF: /*reply received, waiting for confirm to be sended*/
+                case fsm_W84_REPLY: /*auth has been confirmed, waiting for reply*/
+                case fsm_W84_REPLY_CONF: /*reply received, waiting for confirm to be sended*/
                     safePrintStdout("System: Authetication message request timed out. Please try again.\n");
                     setProgramState(progInt, fsm_START);
                     // signal main to wake up
@@ -134,6 +135,7 @@ void filterResentMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
                 }
             } else {
                 safePrintStdout("System: Request timed out. Last message was not sent.\n");   
+                debugPrint(stdout, "Count: %i\n", queueGetSendedCounter(sendingQueue));
             }
         }
         else if(msgToBeSend->msgFlags == msg_flag_REJECTED)

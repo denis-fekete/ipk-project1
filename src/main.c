@@ -200,8 +200,12 @@ void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
 
         // Assembles array of bytes into Buffer protocolMsg, returns if 
         // message can be trasmitted
-        canBeSended = assembleProtocol(&pBlocks, &protocolMsg, progInt);
-
+        UDP_VARIANT
+        canBeSended = assembleProtocolUDP(&pBlocks, &protocolMsg, progInt);
+        TCP_VARIANT
+        canBeSended = assembleProtocolTCP(&pBlocks, &protocolMsg, progInt);
+        flags = msg_flag_DO_NOT_RESEND; // set do not resend to tcp messages
+        END_VARIANTS
         // if message wasnt assebled correcttly
         if(!canBeSended) { continue; }
         
@@ -212,7 +216,7 @@ void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
         bool signalSender = false;
         if(queueIsEmpty(progInt->threads->sendingQueue)) { signalSender = true; }
         
-        queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags);
+        queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags, pBlocks.type);
         
         // signal sender if he is waiting because queue is empty
         if(signalSender)

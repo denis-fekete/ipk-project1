@@ -27,6 +27,7 @@ typedef struct ProtocolBlocks {
         BytesBlock zeroth;
         BytesBlock cmd_command;
         BytesBlock cmd_msg_MsgContents;
+        BytesBlock cmd_err_MsgContents;
         BytesBlock cmd_conf_lowMsgID;
 
         BytesBlock msg_reply_result;
@@ -64,11 +65,14 @@ typedef struct ProtocolBlocks {
     {
         BytesBlock third;
         BytesBlock cmd_auth_displayname;
+        bool msg_reply_result_bool;
+        
     };
 } ProtocolBlocks;
 
 /**
- * @brief Assembles protocol from commands and command type into a buffer
+ * @brief Assembles protocol from commands and command type into a buffer in
+ * UDP format
  * 
  * @param pBlocks Separated commands and values from user input
  * @param buffer Output buffer to be trasmited to the server
@@ -77,16 +81,39 @@ typedef struct ProtocolBlocks {
  * 
  * @return Returns true if buffer can be sended to the server
  */
-bool assembleProtocol(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterface* progInt);
+bool assembleProtocolUDP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterface* progInt);
+
+/**
+ * @brief Assembles protocol from commands and command type into a buffer in
+ * TCP format
+ * 
+ * @param pBlocks Separated commands and values from user input
+ * @param buffer Output buffer to be trasmited to the server
+ * that don't have all informations provided by user at start
+ * @param progInt Pointer to ProgramInterface
+ * 
+ * @return Returns true if buffer can be sended to the server
+ */
+bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterface* progInt);
+
 
 /**
  * @brief Dissassembles protocol from Buffer into commands, msgType and msgId
- * 
+ * for UDP variant
  * @param buffer Input buffer containing message
  * @param pBlocks Separated commands and values from user input
  * @param msgId Detected message ID 
  */
-void disassebleProtocol(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* msgId);
+bool disassebleProtocolUDP(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* msgId);
+
+/**
+ * @brief Dissassembles protocol from Buffer into commands, msgType and msgId
+ * for TCP variant
+ * @param buffer Input buffer containing message
+ * @param pBlocks Separated commands and values from user input
+ * @param msgId Detected message ID 
+ */
+bool disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks);
 
 #include "msgQueue.h"
 
