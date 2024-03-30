@@ -1,7 +1,10 @@
 /**
  * @file protocolSender.c
  * @author Denis Fekete (xfeket01@vutbr.cz)
- * @brief 
+ * @brief Implementation of Protocol Sender that sends messages to server 
+ * and changes program state accordingly
+ * 
+ * This module is meant to work in separated thread. 
  * 
  * @copyright Copyright (c) 2024
  * 

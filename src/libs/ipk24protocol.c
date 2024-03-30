@@ -1,7 +1,10 @@
 /**
  * @file ipk24protocol.c
  * @author Denis Fekete (xfeket01@vutbr.cz)
- * @brief 
+ * @brief Implmentation of functions for working with IPK24CHAT
+ * Protocol such as assembling or disassembling protocols for both UDP and TCP
+ * variants. Also contains separating user input into an ByteBlocks for further
+ * processing.
  * 
  * @copyright Copyright (c) 2024
  * 
@@ -17,8 +20,8 @@
     stringReplace(&(dst), src.start, src.len);  \
     ptrPos += src.len;
 
-#define ADD_ZERO_BYTE           \
-    buffer->data[ptrPos] = 0;   \
+#define ADD_ZERO_BYTE                           \
+    buffer->data[ptrPos] = 0;                   \
     ptrPos += 1;
 
 #define ADD_STORED_INFO_TO_BUFFER(dst, src)     \
@@ -558,6 +561,7 @@ bool controlWord(BytesBlock* wordBlock, const size_t maxLen, unsigned char typeO
         return false;
     }
     
+    // check all characters in word
     char correct = true;
     size_t i = 0;
     for(; i < wordBlock->len; i++)

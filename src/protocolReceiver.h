@@ -1,7 +1,10 @@
 /**
  * @file protocolReceiver.h
  * @author Denis Fekete (xfeket01@vutbr.cz)
- * @brief 
+ * @brief Header file for Protocol Receiver that receives messages from
+ * server and changes program state accordingly
+ * 
+ * This module is meant to work in separated thread
  * 
  * @copyright Copyright (c) 2024
  * 

@@ -1,4 +1,17 @@
+/**
+ * @file cleanUpMaster.h
+ * @author Denis Fekete (xfeket01@vutbr.cz)
+ * @brief Implementation of functions for Program Interface 
+ * initializing and destroying, as well as function for handling SIGINT
+ * singals.
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 #include "cleanUpMaster.h"
+
+extern ProgramInterface* globalProgInt;
 
 #define IF_NULL_ERR(ptr, message, errCode)  \
     if(ptr == NULL) {                       \
@@ -172,4 +185,55 @@ void programInterfaceDestroy(ProgramInterface* pI)
 
     // ------------------------------------------------------------------------
     free(pI);
+}
+
+/**
+ * @brief Function that handles SIGINT signals and correctly
+ * frees up all memory and closes add comminication 
+ * 
+ * @param num 
+ */
+void sigintHandler(int num) {
+    if(num){} // anti-error--compiler
+
+    // set program state to SIGINT_BYE, which will lead to main thread to exit
+    setProgramState(globalProgInt, fsm_SIGINT_BYE);
+    // signal main thread to wake up if suspended
+    pthread_cond_signal(globalProgInt->threads->mainCond);
+
+    ProtocolBlocks pBlocks = {0};
+    pBlocks.zeroth.start = NULL;    pBlocks.zeroth.len = 0;
+    pBlocks.first.start = NULL;     pBlocks.first.len = 0;
+    pBlocks.second.start = NULL;    pBlocks.second.len = 0;
+    pBlocks.third.start = NULL;     pBlocks.third.len = 0;
+    pBlocks.type = cmd_EXIT;
+
+    queueLock(globalProgInt->threads->sendingQueue);
+
+    // assemble BYE protocol
+    if(globalProgInt->netConfig->protocol == prot_UDP) {
+        assembleProtocolUDP(&pBlocks, &globalProgInt->cleanUp->protocolToSendedByMain, globalProgInt);
+    } else if(globalProgInt->netConfig->protocol == prot_TCP) {
+        assembleProtocolTCP(&pBlocks, &globalProgInt->cleanUp->protocolToSendedByMain, globalProgInt);
+    }
+
+    // add message to the queue
+    queueAddMessagePriority(globalProgInt->threads->sendingQueue, 
+        &globalProgInt->cleanUp->protocolToSendedByMain,
+        msg_flag_DO_NOT_RESEND);
+
+    // singal other threads to wake up if suspended
+    pthread_cond_signal(globalProgInt->threads->senderEmptyQueueCond);
+    pthread_cond_signal(globalProgInt->threads->rec2SenderCond);
+
+    queueUnlock(globalProgInt->threads->sendingQueue);
+
+    // wait on mainMutex, sender will singal that it sended last BYE and exited
+    pthread_cond_wait(globalProgInt->threads->mainCond, globalProgInt->threads->mainMutex);
+
+    // close socket
+    shutdown(globalProgInt->netConfig->openedSocket, SHUT_RDWR);
+    // destory program interface
+    programInterfaceDestroy(globalProgInt);
+    exit(0);
 }

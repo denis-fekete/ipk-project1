@@ -1,7 +1,9 @@
 /**
  * @file msgQueue.c
  * @author Denis Fekete (xfeket01@vutbr.cz)
- * @brief Implemetation of MessageQueue functionality
+ * @brief Implementation of MessageQueue for storing and correctly working 
+ * with multiple messages.
+ * 
  * 
  * @copyright Copyright (c) 2024
  * 

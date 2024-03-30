@@ -1,7 +1,11 @@
 /**
  * @file buffer.c
  * @author Denis Fekete (xfeket01@vutbr.cz)
- * @brief 
+ * @brief Implementation of Buffer functions
+ * 
+ * Buffer is an structure for defining byte arrays (char arrays / string)
+ * with information about how many bytes has been allocated and how many 
+ * has been used.
  * 
  * @copyright Copyright (c) 2024
  * 

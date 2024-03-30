@@ -1,7 +1,11 @@
 /**
  * @file buffer.h
  * @author Denis Fekete (xfeket01@vutbr.cz)
- * @brief 
+ * @brief Structures and declaration of functions for Buffer
+ * 
+ * Buffer is an structure for defining byte arrays (char arrays / string)
+ * with information about how many bytes has been allocated and how many 
+ * has been used.
  * 
  * @copyright Copyright (c) 2024
  * 

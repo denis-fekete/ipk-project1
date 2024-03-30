@@ -1,8 +1,8 @@
 /**
  * @file msgQueue.h
  * @author Denis Fekete (xfeket01@vutbr.cz)
- * @brief Header file for MessageQueue for storing and correctly working with 
- * multiple messages
+ * @brief Declaration of fucntions and structures of MessageQueue for storing 
+ * and correctly working with multiple messages.
  * 
  * @copyright Copyright (c) 2024
  * 

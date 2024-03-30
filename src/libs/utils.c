@@ -1,8 +1,9 @@
 /**
  * @file utils.c
  * @author Denis Fekete (xfeket01@vutbr.cz)
- * @brief 
- * 
+ * @brief Declaration of functions and structures for common/basic tasks in 
+ * program
+ *  
  * @copyright Copyright (c) 2024
  * 
  */

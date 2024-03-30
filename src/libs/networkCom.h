@@ -1,7 +1,7 @@
 /**
  * @file networkCom.h
  * @author Denis Fekete (xfeket01@vutbr.cz)
- * @brief 
+ * @brief Declaration of functions and structures for network connections
  * 
  * @copyright Copyright (c) 2024
  * 

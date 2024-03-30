@@ -1,3 +1,14 @@
+/**
+ * @file programInterface.h
+ * @author Denis Fekete (xfeket01@vutbr.cz)
+ * @brief Declaration of functions and sturctures for Program Interface.
+ * Program Interace is structure holding all informatio needed for 
+ * communication between multiple threads and modules of program
+ * 
+ * @copyright Copyright (c) 2024
+ * 
+ */
+
 #ifndef PROGRAM_INTERFACE_H
 #define PROGRAM_INTERFACE_H
 

@@ -1,7 +1,10 @@
 /**
  * @file ipk24protocol.h
  * @author Denis Fekete (xfeket01@vutbr.cz)
- * @brief 
+ * @brief Declaration of functions and structures for working with IPK24CHAT
+ * Protocol such as assembling or disassembling protocols for both UDP and TCP
+ * variants. Also contains separating user input into an ByteBlocks for further
+ * processing.
  * 
  * @copyright Copyright (c) 2024
  * 
@@ -114,8 +117,6 @@ bool disassebleProtocolUDP(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* ms
  * @param msgId Detected message ID 
  */
 bool disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks);
-
-#include "msgQueue.h"
 
 /**
  * @brief Takes input from user (client) from buffer and break it into an

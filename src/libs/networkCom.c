@@ -1,7 +1,7 @@
 /**
  * @file networkCom.c
  * @author Denis Fekete (xfeket01@vutbr.cz)
- * @brief 
+ * @brief Implementation of for working with network connections 
  * 
  * @copyright Copyright (c) 2024
  * 

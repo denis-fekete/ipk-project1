@@ -1,7 +1,9 @@
 /**
  * @file utils.h
  * @author Denis Fekete (xfeket01@vutbr.cz)
- * @brief 
+ * @brief Declaration of functions and structures for common/basic tasks in 
+ * program. Also defines Fininite State Machine state and Command Types.
+ * 
  * 
  * @copyright Copyright (c) 2024
  * 

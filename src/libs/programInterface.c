@@ -1,7 +1,9 @@
 /**
  * @file programInterface.c
  * @author Denis Fekete (xfeket01@vutbr.cz)
- * @brief 
+ * @brief Implementation of Program Interface.
+ * Program Interace is structure holding all informatio needed for 
+ * communication between multiple threads and modules of program
  * 
  * @copyright Copyright (c) 2024
  * 
