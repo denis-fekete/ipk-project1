@@ -74,19 +74,13 @@ typedef struct BytesBlock {
 // ----------------------------------------------------------------------------
 
 /**
- * @brief Print error message to stderr and exit program with errorCode
+ * @brief Prints msg and exits program with errorCode
  * 
  * @param msg Message to be printed
- * @param errorCode Error code to be exited with
+ * @param errorCode Error code that will be used as exit code
+ * @return int Returns 0 (for anti-compiler errors) 
  */
 int errHandling(const char* msg, int errorCode);
-
-/**
- * @brief Prints message to the user, used for feedback no error messages
- * 
- * @param msg Message to be printed
- */
-void displayMsgToUser(const char* msg);
 
 /**
  * @brief Returns word from string. Look from first character until 
@@ -99,6 +93,7 @@ void displayMsgToUser(const char* msg);
  * @return false Failed
  */
 bool getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize);
+
 /**
  * @brief Finds first blank character (spaces ' ' and tabulators '\t') 
  * in string and returns index of last character before blank character

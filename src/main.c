@@ -171,6 +171,11 @@ bool filterCommandsByFSM(ProtocolBlocks* pBlocks, ProgramInterface* progInt, msg
 //
 // ----------------------------------------------------------------------------
 
+/**
+ * @brief Main loop for user input
+ * 
+ * @param progInt Pointer to the program interface
+ */
 void userCommandHandling(ProgramInterface* progInt)
 {
     // use already allocated buffers for global freeing in case of SIGINT
@@ -195,7 +200,9 @@ void userCommandHandling(ProgramInterface* progInt)
         // Separate clientCommands buffer into commands (ByteBlocks),
         // store recognized command
         flags = msg_flag_NONE;
-        userInputToCmds(clientInput, &pBlocks, &eofDetected, &flags);
+        canBeSended = userInputToCmds(clientInput, &pBlocks, &eofDetected, &flags);
+        // if user command cannot be sended try again
+        if(!canBeSended) { continue; }
 
         // Filter commands by type and FSM state
         canBeSended = filterCommandsByFSM(&pBlocks, progInt, &flags);
@@ -245,6 +252,11 @@ void userCommandHandling(ProgramInterface* progInt)
     }
 }
 
+/**
+ * @brief Handling of SIGINT singal
+ * 
+ * @param num 
+ */
 void sigintHandler(int num) {
     if(num){}
 
@@ -294,8 +306,6 @@ void sigintHandler(int num) {
 //
 // ----------------------------------------------------------------------------
 
-
-
 int main(int argc, char* argv[])
 {
     // ------------------------------------------------------------------------
@@ -308,9 +318,12 @@ int main(int argc, char* argv[])
         errHandling("Failed to initialize program interface", 1);
     }
 
+    // initialize Program Interface
     programInterfaceInit(progInt);
+    // set global program interface for SIGINT handling
     globalProgInt = progInt;
 
+    // SIGINT handling
     signal(SIGINT, sigintHandler);
 
     // ------------------------------------------------------------------------
@@ -360,8 +373,6 @@ int main(int argc, char* argv[])
             errHandling("Failed to connect to the server", 1);
         } 
     END_VARIANTS
-
-
 
     // ------------------------------------------------------------------------
     // Setup second thread that will handle data receiving

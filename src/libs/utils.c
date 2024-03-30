@@ -9,32 +9,19 @@
 
 #include "utils.h"
 
+/**
+ * @brief Prints msg and exits program with errorCode
+ * 
+ * @param msg Message to be printed
+ * @param errorCode Error code that will be used as exit code
+ * @return int Returns 0 (for anti-compiler errors) 
+ */
 int errHandling(const char* msg, int errorCode)
 {
     fprintf(stderr, "ERR: %s\n", msg);
     exit(errorCode);
     return 0;
 }
-
-// ----------------------------------------------------------------------------
-//
-// ----------------------------------------------------------------------------
-
-long findZeroInString(char* string, size_t len)
-{
-    long index = 0;
-    while( ((size_t)index < len) && (string[index] != 0) )
-    {
-        index++;
-    }
-
-    if(index <= 0)
-    {
-        return errHandling("Intrnal error in findZeroInString()", 1); // TODO: change error code
-    }
-    else { return index; }
-}
-
 
 // ----------------------------------------------------------------------------
 //
@@ -71,6 +58,15 @@ bool getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize)
 //
 // ----------------------------------------------------------------------------
 
+
+/**
+ * @brief Finds first blank character (spaces ' ' and tabulators '\t') 
+ * in string and returns index of last character before blank character
+ * 
+ * @param string Input string to be searched in
+ * @param len Length of string that cannot be exceeded
+ * @return long Index in string
+ */
 long findBlankCharInString(char* string, size_t len)
 {
     size_t index = 0;
@@ -110,7 +106,13 @@ long findNewLineInString(char* string, size_t len)
     return -1;
 }
 
-
+/**
+ * @brief Skips blank character until a first non empty character is found
+ * 
+ * @param string String to be searched in
+ * @param len Length of string that cannot be 
+ * @return long 
+ */
 long skipBlankCharsInString(char* string, size_t len)
 {
     size_t index = 0;
@@ -132,6 +134,35 @@ long skipBlankCharsInString(char* string, size_t len)
     return -1;
 }
 
+/**
+ * @brief Returns index of last character before '\0' character in string
+ * 
+ * @param string Pointer to the string
+ * @param len Length of the string
+ * @return long Index of last character before \0
+ */
+long findZeroInString(char* string, size_t len)
+{
+    long index = 0;
+    while( ((size_t)index < len) && (string[index] != 0) )
+    {
+        index++;
+    }
+
+    if(index <= 0)
+    {
+        return errHandling("Intrnal error in findZeroInString()", 1); // TODO: change error code
+    }
+    else { return index; }
+}
+
+/**
+ * @brief Returns true if character is considered as an ending character for
+ * command
+ * 
+ * @param input Input character
+ * @return int If yes 1 (True), 0 (False)
+ */
 int isEndingCharacter(char input)
 {
     // 3 = Ctrl-D, 4 = Ctrl-C
@@ -143,11 +174,17 @@ int isEndingCharacter(char input)
     return 1;
 }
 
-
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
 
+/**
+ * @brief Replaces bytes in dst with bytes from src up to len lenght
+ * 
+ * @param dst Destinatin byte array
+ * @param src Source byte arry
+ * @param len Number of bytes to replace
+ */
 void stringReplace(char* dst, char* src, size_t len)
 {
     if(dst != NULL && src != NULL)

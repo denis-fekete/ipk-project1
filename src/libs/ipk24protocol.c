@@ -472,6 +472,139 @@ bool disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks)
     return true;
 }
 
+/**
+ * @brief Checks if input character is alligable to be in credentials 
+ * 
+ * @param input Input character
+ * @return true Character is alligable
+ * @return false Character is not alligable
+ */
+bool allowedCharsInCredentials(char input)
+{
+    if(input >= 'a' && input <= 'z')
+        return true;
+    else if(input >= 'A' && input <= 'Z')
+        return true;
+    else if(input >= '0' && input <= '9')
+        return true;
+
+    #ifdef DEBUG // allow "." in debug mode
+        if(input == '.')
+        {
+            return true;
+        }
+    #endif
+
+    return false;
+}
+
+/**
+ * @brief Checks if input character is alligable to be in display name 
+ * 
+ * @param input Input character
+ * @return true Character is alligable
+ * @return false Character is not alligable
+ */
+bool allowedCharsInName(char input)
+{
+    if(input >= 0x21 && input <= 0x7E)
+        return true;
+    return false;
+}  
+
+/**
+ * @brief Checks if input character is alligable to be in message contents 
+ * 
+ * @param input Input character
+ * @return true Character is alligable
+ * @return false Character is not alligable
+ */
+bool allowedCharsInMessage(char input)
+{
+    if(input >= 0x20 && input <= 0x7E)
+        return true;
+    return false;
+}  
+
+// Types of Words
+#define ToW_Username 1
+#define ToW_ChannelID 2
+#define ToW_Secret 3
+#define ToW_DisplayName 4
+#define ToW_MessageContent 5
+/**
+ * @brief Controls whenever word is valid
+ * 
+ * @param wordBlock Pointer to be ByteBlock that holds word values
+ * @param maxLen Maximum allowed length for this word
+ * @param typeOfWord Type of Word, characters will controlled by this argument
+ * @return true Word is valid
+ * @return false Word is not valid
+ */
+bool controlWord(BytesBlock* wordBlock, const size_t maxLen, unsigned char typeOfWord)
+{
+
+    // check if word has correct length
+    if(wordBlock->len > maxLen)
+    {
+        fprintf(stderr, "ERR: Parameter \"");
+        for(size_t i = 0; i < wordBlock->len; i++)
+        {
+            fprintf(stderr, "%c", wordBlock->start[i]);
+        }
+        fprintf(stderr, "\" exceeded maximum allowed length (%li). "
+            "Message will not be sended.\n", maxLen);
+
+        return false;
+    }
+    
+    char correct = true;
+    size_t i = 0;
+    for(; i < wordBlock->len; i++)
+    {
+        if( typeOfWord == ToW_Username || typeOfWord == ToW_ChannelID ||
+            typeOfWord == ToW_Secret)
+        {
+            if( !allowedCharsInCredentials(wordBlock->start[i]))
+            {
+                correct = false;
+                break;
+            }
+        }
+        else if(typeOfWord == ToW_DisplayName)
+        {
+            if( !allowedCharsInName(wordBlock->start[i]) )
+            {
+                correct = false;
+                break;
+            }
+        }
+        else if(typeOfWord == ToW_MessageContent)
+        {
+            if( !allowedCharsInMessage(wordBlock->start[i]) )
+            {
+                correct = false;
+                break;
+            }   
+        }
+    }
+
+    // if "i" didn't control whole word
+    if(!correct)
+    {
+        fprintf(stderr, "ERR: Parameter \"");
+        for(size_t i = 0; i < wordBlock->len; i++)
+        {
+            fprintf(stderr, "%c", wordBlock->start[i]);
+        }
+        fprintf(stderr, "\" contains invalid character \"%c\" at position: %li. "
+            "Message will not be sended.\n", wordBlock->start[i], i);
+
+        return false;
+    }
+    return true;
+}
+
 #undef MSG_FROM_TEXT
 #undef IS_TEXT
 #undef REPLY_TEXT
@@ -487,7 +620,7 @@ bool disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks)
 
 /**
  * @brief Wrapper around getWord(), if not enough arguments given
- * change this into an plain message. 
+ * change all other commands into an message. 
  * 
  * This is instead of GOTO
  */
@@ -495,7 +628,9 @@ bool disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks)
     pBlocks->cmd_msg_MsgContents.start = buffer->data;  \
     pBlocks->cmd_msg_MsgContents.len = buffer->used;    \
     pBlocks->type = cmd_MSG;                            \
-    return;                                             \
+    /*checks if input is alligable to be message if it cannot be command*/                      \
+    if(!controlWord(&pBlocks->cmd_msg_MsgContents, 14000, ToW_MessageContent)) { return false; }\
+    return true;                                        \
     }
 
 
@@ -507,16 +642,15 @@ bool disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks)
  * will lead to unexpected behavior commands in commands
  * 
  * @param buffer Input buffer containing command from user (client)
- * @param pBlocks Structure that holds user input separated into commands 
+ * @param commands Array of commands where separated commands will be store 
  * @param eofDetected Signals that end of file was detected
  * @param flags Flags that will be set to message
- * @return cmd_t Returns command type
- * // TODO: rewrite
+ * @return bool Returns whenever parameters are valid
  */
-void userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, bool* eofDetected, msg_flags* flags)
+bool userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, bool* eofDetected, msg_flags* flags)
 {
     // If buffer is not filled skip
-    if(buffer->used <= 0) { pBlocks->type = cmd_NONE; return; }
+    if(buffer->used <= 0) { pBlocks->type = cmd_NONE; return false; }
 
     size_t index = findBlankCharInString(buffer->data, buffer->used);
     // get command into ProtocolBlocks
@@ -542,6 +676,10 @@ void userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, bool* eofDetected,
         TRY_GET_WORD( getWord(&second, &(first.start[first.len]), buffer->used - (cmd.len + first.len)) )
         TRY_GET_WORD( getWord(&third, &(second.start[second.len]), buffer->used - (cmd.len + first.len + second.len)))
 
+        if(!controlWord(&first, 20, ToW_Username)) { return false; }
+        if(!controlWord(&second, 128, ToW_Secret)) { return false; }
+        if(!controlWord(&third, 20, ToW_DisplayName)) { return false; }
+
         // set message flag
         *flags = msg_flag_AUTH;
 
@@ -563,14 +701,18 @@ void userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, bool* eofDetected,
         // find end of line in string
         first.len = findNewLineInString(first.start, buffer->used - cmd.len);
 
+
         // store information into correct ProtocolBlocks parts
+        // if tmp == 0 join was provided
         if(tmp == 0)
         {
+            if(!controlWord(&first, 20, ToW_ChannelID)) { return false; }
             pBlocks->type = cmd_JOIN;
             pBlocks->cmd_join_channelID = first;
         }
         else
         {
+            if(!controlWord(&first, 20, ToW_DisplayName)) { return false; }
             pBlocks->type = cmd_RENAME;
             pBlocks->cmd_rename_displayname = first;     
         }
@@ -592,5 +734,15 @@ void userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, bool* eofDetected,
         pBlocks->cmd_msg_MsgContents.start = buffer->data;
         pBlocks->cmd_msg_MsgContents.len = buffer->used;
         pBlocks->type = cmd_MSG;
+
+        if(!controlWord(&pBlocks->cmd_msg_MsgContents, 14000, ToW_MessageContent)) { return false; }
     }
+
+    return true;
 }
+
+#undef ToW_Username
+#undef ToW_ChannelID
+#undef ToW_Secret
+#undef ToW_DisplayName
+#undef ToW_MessageContent

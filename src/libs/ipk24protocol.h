@@ -128,9 +128,9 @@ bool disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks);
  * @param commands Array of commands where separated commands will be store 
  * @param eofDetected Signals that end of file was detected
  * @param flags Flags that will be set to message
- * @return cmd_t Returns command type
+ * @return bool Returns whenever parameters are valid
  */
-void userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, bool* eofDetected, msg_flags* flags);
+bool userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, bool* eofDetected, msg_flags* flags);
 
 
 #endif
