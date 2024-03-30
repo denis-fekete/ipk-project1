@@ -11,12 +11,16 @@
 
 #include "protocolReceiver.h"
 #include "protocolSender.h"
-#include "errno.h"
+// call programInterface again to define cleanup function
+#include "libs/cleanUpMaster.h"
+#include "signal.h"
 
 #ifdef DEBUG
     // global variable for printing to debug, only if DEBUG is defined
     pthread_mutex_t debugPrintMutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
+
+ProgramInterface* globalProgInt;
 
 // ----------------------------------------------------------------------------
 //
@@ -50,6 +54,7 @@ void processArguments(int argc, char* argv[], enum Protocols* prot, Buffer* ipAd
             }
             break;
         case 's': ; // compiler doesn't like size_t being after : 
+
             optLen = strlen(optarg);
             bufferResize(ipAddress, optLen + 1);
             stringReplace(ipAddress->data, optarg, optLen);
@@ -71,7 +76,6 @@ void processArguments(int argc, char* argv[], enum Protocols* prot, Buffer* ipAd
         }
     }
 }
-
 
 // ----------------------------------------------------------------------------
 //
@@ -167,18 +171,18 @@ bool filterCommandsByFSM(ProtocolBlocks* pBlocks, ProgramInterface* progInt, msg
 //
 // ----------------------------------------------------------------------------
 
-void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
+void userCommandHandling(ProgramInterface* progInt)
 {
-    Buffer protocolMsg;
-    bufferInit(&protocolMsg);
+    // use already allocated buffers for global freeing in case of SIGINT
+    Buffer* protocolMsg = &(progInt->cleanUp->protocolToSendedByMain);
+    Buffer* clientInput = &(progInt->cleanUp->clientInput);
 
     bool canBeSended;
     bool eofDetected = false;
     msg_flags flags = msg_flag_NONE;
     ProtocolBlocks pBlocks;
 
-    // continue while continueProgram is true, only main id can go into this loop
-    while (getProgramState(progInt) != fsm_END)
+    while (getProgramState(progInt) != fsm_SIGINT_BYE && getProgramState(progInt) != fsm_END)
     {
         debugPrint(stdout, "DEBUG: Main resumed\n");
         // --------------------------------------------------------------------
@@ -202,9 +206,9 @@ void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
         // Assembles array of bytes into Buffer protocolMsg, returns if 
         // message can be trasmitted
         UDP_VARIANT
-            canBeSended = assembleProtocolUDP(&pBlocks, &protocolMsg, progInt);
+            canBeSended = assembleProtocolUDP(&pBlocks, protocolMsg, progInt);
         TCP_VARIANT
-            canBeSended = assembleProtocolTCP(&pBlocks, &protocolMsg, progInt);
+            canBeSended = assembleProtocolTCP(&pBlocks, protocolMsg, progInt);
         END_VARIANTS
         // if message wasnt assebled correcttly
         if(!canBeSended) { continue; }
@@ -216,7 +220,7 @@ void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
         bool signalSender = false;
         if(queueIsEmpty(progInt->threads->sendingQueue)) { signalSender = true; }
         
-        queueAddMessage(progInt->threads->sendingQueue, &protocolMsg, flags, pBlocks.type);
+        queueAddMessage(progInt->threads->sendingQueue, protocolMsg, flags, pBlocks.type);
         debugPrint(stdout, "DEBUG: Main added message to the queue (flags: %i)\n", flags);
         // signal sender if he is waiting because queue is empty
         if(signalSender)
@@ -239,11 +243,52 @@ void userCommandHandling(ProgramInterface* progInt, Buffer* clientInput)
         // wait for message to be processed/confirmed
         pthread_cond_wait(progInt->threads->mainCond, progInt->threads->mainMutex);
     }
-
-    // free allocated memory
-    free(protocolMsg.data);
 }
 
+void sigintHandler(int num) {
+    if(num){}
+
+    // set program state to SIGINT_BYE, which will lead to main thread to exit
+    setProgramState(globalProgInt, fsm_SIGINT_BYE);
+    // signal main thread to wake up if suspended
+    pthread_cond_signal(globalProgInt->threads->mainCond);
+
+    ProtocolBlocks pBlocks = {0};
+    pBlocks.zeroth.start = NULL;    pBlocks.zeroth.len = 0;
+    pBlocks.first.start = NULL;     pBlocks.first.len = 0;
+    pBlocks.second.start = NULL;    pBlocks.second.len = 0;
+    pBlocks.third.start = NULL;     pBlocks.third.len = 0;
+    pBlocks.type = cmd_EXIT;
+
+    queueLock(globalProgInt->threads->sendingQueue);
+
+    // assemble BYE protocol
+    if(globalProgInt->netConfig->protocol == prot_UDP) {
+        assembleProtocolUDP(&pBlocks, &globalProgInt->cleanUp->protocolToSendedByMain, globalProgInt);
+    } else if(globalProgInt->netConfig->protocol == prot_TCP) {
+        assembleProtocolTCP(&pBlocks, &globalProgInt->cleanUp->protocolToSendedByMain, globalProgInt);
+    }
+
+    // add message to the queue
+    queueAddMessagePriority(globalProgInt->threads->sendingQueue, 
+        &globalProgInt->cleanUp->protocolToSendedByMain,
+        msg_flag_DO_NOT_RESEND);
+
+    // singal other threads to wake up if suspended
+    pthread_cond_signal(globalProgInt->threads->senderEmptyQueueCond);
+    pthread_cond_signal(globalProgInt->threads->rec2SenderCond);
+
+    queueUnlock(globalProgInt->threads->sendingQueue);
+
+    // wait on mainMutex, sender will singal that it sended last BYE and exited
+    pthread_cond_wait(globalProgInt->threads->mainCond, globalProgInt->threads->mainMutex);
+
+    // close socket
+    shutdown(globalProgInt->netConfig->openedSocket, SHUT_RDWR);
+    // destory program interface
+    programInterfaceDestroy(globalProgInt);
+    exit(0);
+}
 
 // ----------------------------------------------------------------------------
 //
@@ -257,85 +302,38 @@ int main(int argc, char* argv[])
     // Initialize interface for program
     // ------------------------------------------------------------------------
 
-    ProgramInterface progInterface;
-    ProgramInterface* progInt = &progInterface; // this is done so safePrint macro works
+    ProgramInterface* progInt = (ProgramInterface*) calloc(1, sizeof(ProgramInterface));
+    if(progInt == NULL)
+    {
+        errHandling("Failed to initialize program interface", 1);
+    }
 
-    ThreadCommunication threads;
-    progInt->threads = &threads; 
+    programInterfaceInit(progInt);
+    globalProgInt = progInt;
 
-    progInt->threads->continueProgram = true;
-    progInt->threads->fsmState = fsm_START;
-
-    MessageQueue sendingQueue;
-    queueInit(&sendingQueue); // queue of outcoming (user sent) messages
-
-    progInt->threads->sendingQueue = &sendingQueue;
-    
-    pthread_cond_t senderEmptyQueueCond;
-    pthread_cond_init(&senderEmptyQueueCond, NULL);
-    pthread_mutex_t senderEmptyQueueMutex;
-    pthread_mutex_init(&senderEmptyQueueMutex, NULL);
-
-    pthread_cond_t rec2SenderCond;
-    pthread_cond_init(&rec2SenderCond, NULL);
-    pthread_mutex_t rec2SenderMutex;
-    pthread_mutex_init(&rec2SenderMutex, NULL);
-
-    pthread_cond_t mainCond;
-    pthread_cond_init(&mainCond, NULL);
-    pthread_mutex_t mainMutex;
-    pthread_mutex_init(&mainMutex, NULL);
-
-    pthread_mutex_t stdoutMutex;
-    pthread_mutex_init(&stdoutMutex, NULL);
-
-    pthread_mutex_t fsmMutex;
-    pthread_mutex_init(&fsmMutex, NULL);
-
-    progInt->threads->stdoutMutex = &stdoutMutex;
-    progInt->threads->fsmMutex = &fsmMutex;
-
-    progInt->threads->senderEmptyQueueCond = &senderEmptyQueueCond;
-    progInt->threads->senderEmptyQueueMutex = &senderEmptyQueueMutex;
-
-    progInt->threads->rec2SenderCond = &rec2SenderCond;
-    progInt->threads->rec2SenderMutex = &rec2SenderMutex;
-
-    progInt->threads->mainCond = &mainCond;
-    progInt->threads->mainMutex = &mainMutex;
-
-    NetworkConfig netConfig;
-    progInterface.netConfig = &netConfig;
-
-    CommunicationDetails comDetails;
-    progInterface.comDetails = &comDetails;
-    progInt->comDetails->msgCounter = 0;
-
-    bufferInit(&(progInt->comDetails->displayName));
-    bufferInit(&(progInt->comDetails->channelID));
+    signal(SIGINT, sigintHandler);
 
     // ------------------------------------------------------------------------
     // Process CLI arguments from user
     // ------------------------------------------------------------------------
 
-    // Use buffer for storing ip address, 
-    // then used for storing client input / commanads
-    Buffer ipAddress; 
-    bufferInit(&ipAddress);
+    // Reuse clientInput Buffer that is not used currently
+    Buffer* ipAddress = &(progInt->cleanUp->clientInput); 
 
     DEFAULT_NETWORK_CONFIG(progInt->netConfig);
 
-    processArguments(argc, argv, &(progInt->netConfig->protocol), &ipAddress, 
+    processArguments(argc, argv, &(progInt->netConfig->protocol), ipAddress, 
                     &(progInt->netConfig->portNumber), &(progInt->netConfig->udpTimeout), 
                     &(progInt->netConfig->udpMaxRetries));
-    
     if(progInt->netConfig->protocol == prot_ERR)
     { 
         errHandling("Argument protocol (-t udp / tcp) is mandatory!", 1); /*TODO:*/
+        programInterfaceDestroy(progInt);
     }
-    if(ipAddress.data == NULL)
+    if(ipAddress->data == NULL)
     {
         errHandling("Server address is (-s address) is mandatory", 1); /*TODO:*/ 
+        programInterfaceDestroy(progInt);
     }
 
     // ------------------------------------------------------------------------
@@ -343,9 +341,9 @@ int main(int argc, char* argv[])
     // ------------------------------------------------------------------------
 
     // open socket for comunication on client side (this)
-    progInterface.netConfig->openedSocket = getSocket(progInt->netConfig->protocol);
+    progInt->netConfig->openedSocket = getSocket(progInt->netConfig->protocol);
     
-    struct sockaddr_in address = findServer(ipAddress.data, progInt->netConfig->portNumber);
+    struct sockaddr_in address = findServer(ipAddress->data, progInt->netConfig->portNumber);
 
     // get server address
     progInt->netConfig->serverAddress = (struct sockaddr*) &address;
@@ -354,13 +352,16 @@ int main(int argc, char* argv[])
     UDP_VARIANT
 
     TCP_VARIANT
-        const int res = connect( progInterface.netConfig->openedSocket, 
+        const int res = connect( progInt->netConfig->openedSocket, 
                     progInt->netConfig->serverAddress,
                     progInt->netConfig->serverAddressSize);
         if( res != 0 ) {
+            programInterfaceDestroy(progInt);
             errHandling("Failed to connect to the server", 1);
         } 
     END_VARIANTS
+
+
 
     // ------------------------------------------------------------------------
     // Setup second thread that will handle data receiving
@@ -376,12 +377,7 @@ int main(int argc, char* argv[])
     // Loop of communication
     // ------------------------------------------------------------------------
 
-    // reuse ipAddress buffer which is already initialized and unused
-    Buffer* clientInput = &ipAddress; 
-
-    userCommandHandling(progInt, clientInput);
-
-    debugPrint(stdout, "DEBUG: Communicaton ended with %u messages\n", (comDetails.msgCounter - 1));
+    userCommandHandling(progInt);
 
     // ------------------------------------------------------------------------
     // Clean up resources 
@@ -390,21 +386,9 @@ int main(int argc, char* argv[])
     pthread_join(protReceiver, NULL);
     pthread_join(protSender, NULL);
 
+    debugPrint(stdout, "DEBUG: Communicaton ended with %u messages\n", (progInt->comDetails->msgCounter - 1));
     shutdown(progInt->netConfig->openedSocket, SHUT_RDWR);
-    free(comDetails.displayName.data);
-    free(comDetails.channelID.data);
-    free(clientInput->data);
-    queueDestroy(progInt->threads->sendingQueue);
-    
-    pthread_mutex_destroy(&rec2SenderMutex);
-    pthread_cond_destroy(&rec2SenderCond);
-    pthread_mutex_destroy(&senderEmptyQueueMutex);
-    pthread_cond_destroy(&senderEmptyQueueCond);
-    pthread_mutex_destroy(&mainMutex);
-    pthread_cond_destroy(&mainCond);
 
-    pthread_mutex_destroy(&stdoutMutex);
-    pthread_mutex_destroy(&fsmMutex);
-
+    programInterfaceDestroy(progInt);
     return 0;
 }

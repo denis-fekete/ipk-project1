@@ -35,6 +35,7 @@ void bufferInit(Buffer* buffer)
  */
 void bufferResize(Buffer* buffer, size_t newSize)
 {
+    debugPrint(stdout, "DEBUG: New Buffer size (new: %li, old: %li)\n", newSize, buffer->allocated);
     if(newSize <= buffer->allocated)
     {
         return;
@@ -45,7 +46,7 @@ void bufferResize(Buffer* buffer, size_t newSize)
     // Check for failed memory reallocation
     if(tmp == NULL)
     {
-        fprintf(stderr, "ERROR: Realloc failed");
+        fprintf(stderr, "ERROR: Realloc failed\n");
         exit(1); // TODO: error code change
     }
     // Save new value to buffer and bufferSize
@@ -156,7 +157,10 @@ void bufferPrint(Buffer* buffer, int useDebugPrint)
  * 
  * @param buffer 
  */
-void bufferDestory(Buffer* buffer)
+void bufferDestroy(Buffer* buffer)
 {
-    free(buffer->data);
+    if(buffer->data != NULL)
+    {
+        free(buffer->data);
+    }   
 }

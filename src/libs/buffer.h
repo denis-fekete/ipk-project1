@@ -84,6 +84,6 @@ void bufferPrint(Buffer* buffer, int useDebugPrint);
  * 
  * @param buffer 
  */
-void bufferDestory(Buffer* buffer);
+void bufferDestroy(Buffer* buffer);
 
 #endif

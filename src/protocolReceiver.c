@@ -400,18 +400,12 @@ void* protocolReceiver(void *vargp)
     ProgramInterface* progInt = (ProgramInterface*) vargp;
     ProtocolBlocks pBlocks;
 
-    Buffer serverResponse;
-    bufferInit(&serverResponse);
-    bufferResize(&serverResponse, 1500); // set max size messages from server
+    Buffer* serverResponse = &(progInt->cleanUp->serverResponse);
+    bufferResize(serverResponse, 1500); // set max size messages from server
 
-    Buffer receiverSendMsgs;
-    bufferInit(&receiverSendMsgs);
+    Buffer* receiverSendMsgs = &(progInt->cleanUp->protocolToSendedByReceiver);
     
-    MessageQueue confirmedMsgs;
-    UDP_VARIANT
-        queueInit(&confirmedMsgs);
-    TCP_VARIANT /*In TCP variant MessageQueue for confirmed messages is not needed*/
-    END_VARIANTS
+    MessageQueue* confirmedMsgs = progInt->cleanUp->confirmedMessages;
 
     // Await response
     int flags = 0; // TODO: look if some flags could be used
@@ -438,24 +432,24 @@ void* protocolReceiver(void *vargp)
     bool noerr = true;
     while(getProgramState(progInt) != fsm_END)
     {
-        int bytesRx = recvfrom(progInt->netConfig->openedSocket, serverResponse.data,
-                                serverResponse.allocated, flags, 
+        int bytesRx = recvfrom(progInt->netConfig->openedSocket, serverResponse->data,
+                                serverResponse->allocated, flags, 
                                 progInt->netConfig->serverAddress, 
                                 &(progInt->netConfig->serverAddressSize));
         // receiver timeout expired
         if(bytesRx <= 0) {continue;}
 
-        serverResponse.used = bytesRx; //set buffer length (activly used) bytes
+        serverResponse->used = bytesRx; //set buffer length (activly used) bytes
         
         UDP_VARIANT
-            noerr = disassebleProtocolUDP(&serverResponse, &pBlocks, &msgID);
+            noerr = disassebleProtocolUDP(serverResponse, &pBlocks, &msgID);
         TCP_VARIANT
-            noerr = disassebleProtocolTCP(&serverResponse, &pBlocks);
+            noerr = disassebleProtocolTCP(serverResponse, &pBlocks);
         END_VARIANTS
 
         #ifdef DEBUG
             debugPrint(stdout, "DEBUG: Receiver:");
-            bufferPrint(&serverResponse, 1);
+            bufferPrint(serverResponse, 1);
             debugPrintSeparator(stdout);
         #endif
 
@@ -469,12 +463,8 @@ void* protocolReceiver(void *vargp)
 
 
         receiverFSM(progInt, msgID, &pBlocks, progInt->threads->sendingQueue, 
-            &serverResponse, &confirmedMsgs, &receiverSendMsgs, noerr);
+            serverResponse, confirmedMsgs, receiverSendMsgs, noerr);
     }
-
-    bufferDestory(&serverResponse);
-    bufferDestory(&receiverSendMsgs);
-    queueDestroy(&confirmedMsgs);
 
     debugPrint(stdout, "DEBUG: Receiver ended\n");
 

@@ -37,6 +37,8 @@ void queueDestroy(MessageQueue* queue)
     queuePopAllMessages(queue);
 
     pthread_mutex_destroy(&(queue->lock));
+
+    free(queue);
 }
 
 // ----------------------------------------------------------------------------
@@ -246,7 +248,7 @@ void queuePopMessage(MessageQueue* queue)
     if(oldFirst->buffer != NULL)
     {
         // destroy message
-        bufferDestory(oldFirst->buffer); // buffer.data
+        bufferDestroy(oldFirst->buffer); // buffer.data
         free(oldFirst->buffer); // buffer pointer
     }
     free(oldFirst); // message pointer

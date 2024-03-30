@@ -187,7 +187,7 @@ void* protocolSender(void* vargp)
     struct timespec timeToWait; // time variable for timeout calculation
     struct timeval timeNow; // time variable for timeout calculation
 
-    while( getProgramState(progInt) != fsm_END ) 
+    while( getProgramState(progInt) != fsm_END) 
     {
         // --------------------------------------------------------------------
         // Filter out confirmed messages or messages with too many resends
@@ -208,7 +208,7 @@ void* protocolSender(void* vargp)
         if(queueIsEmpty(sendingQueue))
         {
             // if queue is empty and state is empty queue and bye, end
-            if(getProgramState(progInt) == fsm_EMPTY_Q_BYE)
+            if(getProgramState(progInt) == fsm_EMPTY_Q_BYE || getProgramState(progInt) == fsm_SIGINT_BYE)
             {
                 // bye was sended, end program
                 setProgramState(progInt, fsm_END);
@@ -250,6 +250,8 @@ void* protocolSender(void* vargp)
         UDP_VARIANT
             // set correct message id right before sending it
             queueSetMessageID(sendingQueue, progInt);
+        TCP_VARIANT
+            progInt->comDetails->msgCounter += 1;
         END_VARIANTS
 
         #ifdef DEBUG
@@ -285,14 +287,14 @@ void* protocolSender(void* vargp)
                 break;
             }
         TCP_VARIANT
-            // in tcp variant always pop message
-            queuePopMessage(sendingQueue);
             // if it was message, signal main
             if(msgToBeSend->type == msg_MSG || msgToBeSend->type == msg_JOIN)
             {
                 // ping main to work again
                 pthread_cond_signal(progInt->threads->mainCond);
             }
+            // in tcp variant always pop message
+            queuePopMessage(sendingQueue);
         END_VARIANTS
 
         queueUnlock(sendingQueue);
@@ -326,7 +328,6 @@ void* protocolSender(void* vargp)
         TIMEOUT_CALCULATION(progInt->netConfig->udpTimeout);
         pthread_cond_timedwait(progInt->threads->rec2SenderCond, progInt->threads->rec2SenderMutex, &timeToWait);
 
-    // repeat until continueProgram is false and queue is empty
     }
 
     debugPrint(stdout, "DEBUG: Sender ended\n");

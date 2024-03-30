@@ -33,7 +33,8 @@ typedef enum FSM {
     fsm_EMPTY_Q_BYE, /*send all messages left in queue and then end*/
     fsm_BYE_RECV, /*bye was received, prepare to end program*/
     fsm_ERR, 
-    fsm_END
+    fsm_SIGINT_BYE, /*turn off all threads except sender*/
+    fsm_END,
     } fsm_t;
 
 typedef enum CommandType {

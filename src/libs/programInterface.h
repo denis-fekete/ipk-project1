@@ -16,7 +16,6 @@ typedef struct CommunicationDetails {
 
 typedef struct ThreadCommunication {
     // true = work as normal, false = prepare to end
-    bool continueProgram; // variable to signal that program should prepare for finishing
     fsm_t fsmState; // state of FSM, how should program behave 
 
     pthread_mutex_t* stdoutMutex;
@@ -34,10 +33,21 @@ typedef struct ThreadCommunication {
     pthread_mutex_t* mainMutex; // signaling sender thread from receiver thread
 } ThreadCommunication;
 
+typedef struct CleanUp
+{
+    Buffer clientInput;
+    Buffer protocolToSendedByMain;
+    Buffer protocolToSendedByReceiver;
+    Buffer serverResponse;
+    struct MessageQueue* confirmedMessages;
+} CleanUp;
+
+/*approx. 740 bytes*/
 typedef struct ProgramInterface {
     CommunicationDetails* comDetails;
     struct NetworkConfig* netConfig;
     ThreadCommunication* threads;
+    CleanUp* cleanUp;
 } ProgramInterface;
 
 // ----------------------------------------------------------------------------
@@ -67,6 +77,5 @@ void setProgramState(ProgramInterface* progInt, fsm_t newState);
  * @brief Returns program state with thread protecion using mutex
  */
 fsm_t getProgramState(ProgramInterface* progInt);
-
 
 #endif /*PROGRAM_INTERFACE_H*/
