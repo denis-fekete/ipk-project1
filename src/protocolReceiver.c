@@ -53,11 +53,12 @@ void sendConfirm(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterf
 }
 
 /**
- * @brief 
+ * @brief Create err protocol
  * 
- * @param serverResponse 
- * @param receiverSendMsgs 
- * @param progInt 
+ * @param serverResponse Buffer from which will referenceID be taken
+ * @param receiverSendMsgs Buffer to which should message be stored
+ * @param progInt Pointer to Program Interface
+ * @param message Message to be sended to the server
  */
 void sendError(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterface* progInt, const char* message)
 {
@@ -390,9 +391,9 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
 }
 
 /**
- * @brief 
+ * @brief Initializes protocol receiving functionality 
  * 
- * @param vargp 
+ * @param vargp arguments
  * @return void* 
  */
 void* protocolReceiver(void *vargp)

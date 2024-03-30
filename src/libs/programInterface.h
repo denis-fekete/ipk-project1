@@ -19,12 +19,23 @@
 // Structures
 // ----------------------------------------------------------------------------
 
+/**
+ * @brief Structure holding basic communication details.
+ * 
+ * displayname - identity of client that is send to server as 
+ * channelID - currect channel that client is connected to
+ * msgCounter - counter of send messages
+ */
 typedef struct CommunicationDetails {
     Buffer displayName;
     Buffer channelID;
     uint16_t msgCounter;
 } CommunicationDetails;
 
+/**
+ * @brief Structure holding structures and variables for communication between 
+ * threads
+ */
 typedef struct ThreadCommunication {
     // true = work as normal, false = prepare to end
     fsm_t fsmState; // state of FSM, how should program behave 
@@ -44,6 +55,10 @@ typedef struct ThreadCommunication {
     pthread_mutex_t* mainMutex; // signaling sender thread from receiver thread
 } ThreadCommunication;
 
+/**
+ * @brief Structure holding other structures that could be local in modules 
+ * but needs to be cleaned up
+ */
 typedef struct CleanUp
 {
     Buffer clientInput;
@@ -54,6 +69,13 @@ typedef struct CleanUp
 } CleanUp;
 
 /*approx. 740 bytes*/
+/**
+ * @brief Program Interace is structure holding information that is shared 
+ * between program, contains resources meant for multi-threaded 
+ * synchronization, sharing data, holding data about current state of program 
+ * etc... Also hold all dynamically allocated data in program for 
+ * CleanUpMaster to free in case of SIGINT. 
+ */
 typedef struct ProgramInterface {
     CommunicationDetails* comDetails;
     struct NetworkConfig* netConfig;

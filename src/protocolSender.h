@@ -17,6 +17,12 @@
 
 #include "libs/ipk24protocol.h"
 
+/**
+ * @brief Initializes protocol sending functionality 
+ * 
+ * @param vargp arguments
+ * @return void* 
+ */
 void* protocolSender(void* vargp);
 
 #endif

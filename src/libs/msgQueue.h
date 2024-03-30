@@ -21,29 +21,38 @@
 
 typedef struct ProgramInterface ProgramInterface; // declare that ProgramInterface will exist
 
+/**
+ * @brief Flags that can be added to the send messages 
+ */
 typedef enum MessageFlags {
-    msg_flag_NONE, 
-    msg_flag_DO_NOT_RESEND, 
-    msg_flag_NOK_REPLY,
-    msg_flag_AUTH, 
+    msg_flag_NONE, /*default*/
+    msg_flag_DO_NOT_RESEND, /*do not resend*/
+    msg_flag_NOK_REPLY, /*reply is not okey*/
+    msg_flag_AUTH, /*authentication message*/
     msg_flag_REJECTED, /*auth was rejected*/
     msg_flag_CONFIRMED, /*auth was confirmed*/
-    msg_flag_ERR,
+    msg_flag_ERR, /*error / unknown message flag*/
     msg_flag_CONFIRM /*if message is confirm*/
     } msg_flags;
 
+/**
+ * @brief Type of messages
+ */
 typedef enum MessageType {
-    msg_CONF = 0x00,
-    msg_REPLY = 0x01,
-    msg_AUTH = 0x02,
-    msg_JOIN = 0x03,
-    msg_MSG = 0x04,
-    msg_ERR = 0xFE,
-    msg_BYE = 0xFF,
-    msg_UNKNOWN = 0xAA
+    msg_CONF = 0x00, /*confirmation, UDP only*/
+    msg_REPLY = 0x01, /*reply message*/
+    msg_AUTH = 0x02, /*authentication*/
+    msg_JOIN = 0x03, /*join*/
+    msg_MSG = 0x04, /*plain message*/
+    msg_ERR = 0xFE, /*error message*/
+    msg_BYE = 0xFF, /*bye message*/
+    msg_UNKNOWN = 0xAA /*unknown message type*/
   } msg_t;
 
-
+/**
+ * @brief Mesage in list containing Buffer with message contents,
+ *  type of message, flag and pointer to the message behind this message
+ */
 typedef struct Message {
     Buffer* buffer;
     struct Message* behindMe;
@@ -63,6 +72,11 @@ typedef struct Message {
     msg_flags msgFlags;
 } Message;
 
+/**
+ * @brief MessageQueue is priority FIFO (first in first out) queue containg 
+ * Message structures and mutex lock for protecting data from being access 
+ * at multiple points in same time.
+ */
 typedef struct MessageQueue {
     Message* first; // Pointer to the first message
     Message* last; // Pointer to the last message

@@ -24,6 +24,8 @@
     pthread_mutex_t debugPrintMutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
+// global pointer of ProgramInterface, this is needed to ensure correct 
+// closing of program in case of SIGINT
 ProgramInterface* globalProgInt;
 
 // ----------------------------------------------------------------------------
@@ -288,7 +290,7 @@ int main(int argc, char* argv[])
     // Reuse clientInput Buffer that is not used currently
     Buffer* ipAddress = &(progInt->cleanUp->clientInput); 
 
-    DEFAULT_NETWORK_CONFIG(progInt->netConfig);
+    defaultNetworkConfig(progInt->netConfig);
 
     processArguments(argc, argv, &(progInt->netConfig->protocol), ipAddress, 
                     &(progInt->netConfig->portNumber), &(progInt->netConfig->udpTimeout), 

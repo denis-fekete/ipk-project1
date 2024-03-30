@@ -23,7 +23,9 @@
 // ----------------------------------------------------------------------------
 //  Enums
 // ----------------------------------------------------------------------------
-
+/**
+ * @brief Enum for FSM state of program 
+ */
 typedef enum FSM {
     fsm_START, 
     fsm_AUTH_W82_BE_SENDED, /*authentication is waiting(W8) to(2) be sended*/
@@ -39,6 +41,10 @@ typedef enum FSM {
     fsm_END,
     } fsm_t;
 
+/**
+ * @brief Enum for types of different commands that can be proccessed by
+ * program 
+ */
 typedef enum CommandType {
     cmd_AUTH, 
     cmd_JOIN, 
@@ -52,8 +58,6 @@ typedef enum CommandType {
     cmd_CONVERSION_ERR
     } cmd_t;
 
-
-
 // ----------------------------------------------------------------------------
 //  Structures
 // ----------------------------------------------------------------------------
@@ -63,7 +67,6 @@ typedef enum CommandType {
  * 
  * @note Byte block in this context does not own the memory, it is just a 
  * pointer with length
- * 
  */
 typedef struct BytesBlock {
     char* start; // pointer to the starting character of the block

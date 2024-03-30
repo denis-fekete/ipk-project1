@@ -16,8 +16,14 @@
 
 #include "utils.h"
 
+/**
+ * @brief Types of protocol that can be used by application 
+ */
 typedef enum Protocols {prot_ERR=-50, prot_UDP=50, prot_TCP=100} prot_t;
 
+/**
+ * @brief Structure holding current network configuration of program
+ */
 typedef struct NetworkConfig {
     prot_t protocol;
     uint16_t portNumber;
@@ -30,14 +36,6 @@ typedef struct NetworkConfig {
 
 #define PORT_NUMBER 4567
 
-#define DEFAULT_NETWORK_CONFIG(config)   \
-    config->protocol = prot_ERR;         \
-    config->portNumber = PORT_NUMBER;    \
-    config->udpTimeout = 250;            \
-    config->udpMaxRetries = 3;           \
-    config->openedSocket = -1;           \
-    config->serverAddress = NULL;        \
-    config->serverAddressSize = 0;
 /**
  * @brief Get the Socket id
  * 
@@ -54,5 +52,12 @@ int getSocket(prot_t protocol);
  * @return struct sockaddr_in Socket adress that was created
  */
 struct sockaddr_in findServer(const char* serverHostname, uint16_t serverPort);
+
+/**
+ * @brief Sets default values for NetworkConfig
+ * 
+ * @param config pointer to the netword config
+ */
+void defaultNetworkConfig(NetworkConfig* config);
 
 #endif

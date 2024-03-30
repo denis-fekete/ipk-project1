@@ -180,6 +180,12 @@ void filterResentMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
     }
 }
 
+/**
+ * @brief Initializes protocol sending functionality 
+ * 
+ * @param vargp arguments
+ * @return void* 
+ */
 void* protocolSender(void* vargp)
 {
     ProgramInterface* progInt = (ProgramInterface*) vargp;

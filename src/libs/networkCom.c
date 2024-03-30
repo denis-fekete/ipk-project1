@@ -13,6 +13,12 @@
 //
 // ----------------------------------------------------------------------------
 
+/**
+ * @brief Get the Socket id
+ * 
+ * @param protocol Protocol that will be used to open socket (UDP or TCP) 
+ * @return int Socket id
+ */
 int getSocket(enum Protocols protocol)
 {   
     int family;
@@ -33,6 +39,13 @@ int getSocket(enum Protocols protocol)
 //
 // ----------------------------------------------------------------------------
 
+/**
+ * @brief Finds server and returns it socket adress
+ * 
+ * @param serverHostname String containing server hostname
+ * @param serverPort Port of server
+ * @return struct sockaddr_in Socket adress that was created
+ */
 struct sockaddr_in findServer(const char* serverHostname, uint16_t serverPort)
 {
     //TODO: getaddrinfo(), this is depricated, with freeaddrinfo
@@ -52,4 +65,19 @@ struct sockaddr_in findServer(const char* serverHostname, uint16_t serverPort)
     debugPrint(stdout, "DEBUG: Server socket %s : %d \n", inet_ntoa(serverAddress.sin_addr), ntohs(serverAddress.sin_port));
     
     return serverAddress;
+}
+/**
+ * @brief Sets default values for NetworkConfig
+ * 
+ * @param config pointer to the netword config
+ */
+void defaultNetworkConfig(NetworkConfig* config)
+{
+    config->protocol = prot_ERR;
+    config->portNumber = PORT_NUMBER;
+    config->udpTimeout = 250;
+    config->udpMaxRetries = 3;
+    config->openedSocket = -1;
+    config->serverAddress = NULL;
+    config->serverAddressSize = 0;
 }

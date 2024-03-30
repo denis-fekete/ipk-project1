@@ -18,7 +18,6 @@
 /**
  * @brief Sturcture for assembling and dissasembling protocols to make 
  * more readable what is getting store where with the use of unions.
- * 
  */
 typedef struct ProtocolBlocks {
     unsigned char type;
