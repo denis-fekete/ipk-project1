@@ -96,6 +96,8 @@ bool assembleProtocolUDP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         ADD_ZERO_BYTE;
         ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_auth_secret);
         ADD_ZERO_BYTE;
+        // set type of message to AUTH
+        pBlocks->type = msg_AUTH;
         break;
     case cmd_JOIN:
         ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_join_channelID);
@@ -109,22 +111,25 @@ bool assembleProtocolUDP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         
         ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->displayName);
         ADD_ZERO_BYTE;
+        // set type of message to JOIN
+        pBlocks->type = msg_JOIN;
         break;
+    case cmd_ERR:
     case cmd_MSG:
-    case cmd_ERR: // err is same as msg
         // check if displayname is stored
         if(progInt->comDetails->displayName.data == NULL)
-            { 
-                safePrintStdout("System: ChannelID not provided, cannot rename!"
-                    "(Did you use /auth before this commands?). Use /help for help.\n");
-                return false;
-            }
-        stringReplace(&(buffer->data[ptrPos]), progInt->comDetails->displayName.data, progInt->comDetails->displayName.used);
-        ptrPos += progInt->comDetails->displayName.used;
+        { 
+            safePrintStdout("System: ChannelID not provided, cannot rename!"
+                "(Did you use /auth before this commands?). Use /help for help.\n");
+            return false;
+        }
+        // add stored displayname to the messages
+        ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->displayName);
         ADD_ZERO_BYTE;
-        // ADD_STORED_INFO_TO_BUFFER(buffer->data[ptrPos], progInt->comDetails->displayName);
         ADD_BLOCK_TO_BUFFER(buffer->data[ptrPos], pBlocks->cmd_msg_MsgContents);
         ADD_ZERO_BYTE;
+        // set type of message to MSG or ERR
+        pBlocks->type = (type == cmd_MSG)? msg_MSG : msg_ERR;
         break;
     default:
         errHandling("Unknown CommandType in assembleProtocolUDP()\n", 1); // TODO:
@@ -158,9 +163,7 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
     size_t expectedSize = pBlocks->zeroth.len + pBlocks->first.len
                         + pBlocks->second.len + pBlocks->third.len + 1;
 
-    // resize buffer to needed size
-    bufferResize(buffer, expectedSize);
-
+    // based on command increase expected size of buffer
     switch (uchar2CommandType(pBlocks->type))
     {
     case cmd_AUTH:
@@ -173,6 +176,7 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         // expectedSize += sizeof("JOIN ") -1;
         // expectedSize += sizeof(" AS ") -1;
         expectedSize += 5 + 4;
+        expectedSize += progInt->comDetails->channelID.used;
         break;
     case cmd_MSG:
     case cmd_ERR: // err and message are same
@@ -180,6 +184,7 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         // expectedSize += sizeof("ERR FROM ") -1;
         // expectedSize += sizeof(" IS ") -1;
         expectedSize += 9 + 4; 
+        expectedSize += progInt->comDetails->displayName.used;
         break;
     case cmd_EXIT:
         // expectedSize += sizeof("BYE") -1;
@@ -189,6 +194,7 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         errHandling("Unknown command type in assembleProtocolUDP() function", 1); /*TODO: change error code*/
         break;
     }
+    
     // expectedSize += sizeof('\r') + sizeof('\n') -2;
     expectedSize += 2; // "\r\n"
 

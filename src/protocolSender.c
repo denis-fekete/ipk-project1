@@ -30,8 +30,6 @@ void filterMessagesByFSM(ProgramInterface* progInt)
     // get msg again in case someone changed first it ... this is primary 
     // for receiver importing priority messages like CONFIRM
     Message* msgToBeSend = queueGetMessage(sendingQueue); 
-    debugPrint(stdout, "%p\n", (void*)msgToBeSend); //DEBUG:
-    bufferPrint(msgToBeSend->buffer, 9);//DEBUG:
 
     msg_t msgType = queueGetMessageMsgType(sendingQueue);
     
@@ -49,7 +47,6 @@ void filterMessagesByFSM(ProgramInterface* progInt)
         {
             #ifdef DEBUG
                 debugPrint(stdout, "DEBUG: Message that is not auth blocked because of FSM state\n");
-                debugPrint(stdout, "type: %i\n", msgType); //DEBUG:
                 bufferPrint(msgToBeSend->buffer, 9);
             #endif
             queueUnlock(sendingQueue);
@@ -291,9 +288,8 @@ void* protocolSender(void* vargp)
             // in tcp variant always pop message
             queuePopMessage(sendingQueue);
             // if it was message, signal main
-            if(msgToBeSend->type == msg_MSG)
+            if(msgToBeSend->type == msg_MSG || msgToBeSend->type == msg_JOIN)
             {
-                debugPrint(stdout, "DEBUG: MSG Send, waking main\n");
                 // ping main to work again
                 pthread_cond_signal(progInt->threads->mainCond);
             }
