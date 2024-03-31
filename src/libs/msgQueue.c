@@ -324,24 +324,35 @@ size_t queueLength(MessageQueue* queue)
  *  without buffers containing only msg ids
  * 
  * @param queue Pointer to the queue
- * @param highB Higer byte to compare to
- * @param lowB Lower byte to compare to
+ * @param incoming Incoming message pointer
  * @return true Message with this ID was found
  * @return false Message with this ID was not found
  */
-bool queueContainsMessageId(MessageQueue* queue, char highB, char lowB)
+bool queueContainsMessageId(MessageQueue* queue, Message* incoming)
 {
     if(queue == NULL) { return false; }
 
-    Message* msg = queue->first;
-    while(msg != NULL)
+    char highMsgIDByte = incoming->buffer->data[HIGHER_MSGID_BYTE_POSTION];
+    char lowMsgIDByte = incoming->buffer->data[LOWER_MSGID_BYTE_POSTION];
+
+    Message* topOfQueue = queue->first;
+    while(topOfQueue != NULL)
     {
-        if(highB == msg->highMsgId)
+        if(highMsgIDByte == topOfQueue->highMsgId)
         {
-            if(lowB == msg->lowMsgId) { return true; }
+            if(lowMsgIDByte == topOfQueue->lowMsgId)
+            {
+                if(incoming->type == topOfQueue->type)
+                {
+                    if(incoming->msgFlags == topOfQueue->msgFlags)
+                    {
+                        return true; 
+                    }
+                }
+            }
         }
 
-        msg = msg->behindMe;
+        topOfQueue = topOfQueue->behindMe;
     }
     
     return false;
@@ -389,7 +400,7 @@ u_int8_t queueGetSendedCounter(MessageQueue* queue)
 void queueSetMessageID(MessageQueue* queue, ProgramInterface* progInt)
 {
     // check if first exists and if message is not confirm
-    if(queue->first != NULL && queue->first->msgFlags != msg_flag_CONFIRM)
+    if(queue->first != NULL && queue->first->msgFlags != msg_flag_CONFIRM && queue->first->msgFlags != msg_flag_NOK_REPLY)
     {
         // break msgCounter into bytes and store it into buffer at positions
         breakU16IntToBytes(

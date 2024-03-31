@@ -34,9 +34,10 @@ typedef enum FSM {
     fsm_W84_REPLY_CONF, /*reply received, waiting for confirm to be sended*/
     fsm_OPEN, /*authetication was confirmed and replied to*/
     fsm_JOIN_ATEMPT, /*attempted to join another channale, wait for response*/
-    fsm_EMPTY_Q_BYE, /*send all messages left in queue and then end*/
     fsm_BYE_RECV, /*bye was received, prepare to end program*/
+    fsm_EMPTY_Q_BYE, /*send all messages left in queue and then end*/
     fsm_ERR, 
+    fsm_ERR_W84_CONF,
     fsm_SIGINT_BYE, /*turn off all threads except sender*/
     fsm_END,
     } fsm_t;
@@ -54,6 +55,7 @@ typedef enum CommandType {
     cmd_MSG,
     cmd_ERR,
     cmd_EXIT, 
+    cmd_MISSING,
     cmd_NONE,
     cmd_CONVERSION_ERR
     } cmd_t;

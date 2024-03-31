@@ -13,6 +13,65 @@
 #include "sys/time.h"
 
 /**
+ * @brief Prints incoming message (MSG/ERR) in correct format and 
+ * into an correct stream (stdout/stderr)
+ * 
+ * @param progInt Pointer to the program interface
+ * @param pBlocks ProtocolBlocks holding disassembled data
+ */
+void printIncomingMessage(ProgramInterface* progInt, ProtocolBlocks* pBlocks)
+{
+    BytesBlock* displayname;
+    BytesBlock* contents;
+    FILE* fs;
+
+    // lock mutex for stdout
+    pthread_mutex_lock(progInt->threads->stdoutMutex);
+
+    // print prefix
+    switch(uchar2msgType(pBlocks->type))
+    {
+        case msg_ERR:
+            fs = stderr;
+            fprintf(fs, "ERR FROM ");
+            displayname = &(pBlocks->msg_err_displayname);       
+            contents = &(pBlocks->msg_err_MsgContents);   
+            break;
+        case msg_MSG:
+            fs = stdout;
+            displayname = &(pBlocks->msg_msg_displayname);       
+            contents = &(pBlocks->msg_msg_MsgContents);       
+            break;
+        default: break;
+    }
+
+    if(displayname->start == NULL || contents->start == NULL)
+    {
+        errHandling("ERR: Received empty displayname/message contents to print\n", 1);
+    }
+
+    // print display name
+    for(size_t i = 0; i < displayname->len; i++)
+    {
+        fprintf(fs, "%c", displayname->start[i]);
+    }
+    // print :
+    fprintf(fs, ": ");
+    // print contents of the message
+    for(size_t i = 0; i < contents->len; i++)
+    {
+        fprintf(fs, "%c", contents->start[i]);
+    }
+    // print newline
+    fprintf(fs, "\n");
+
+    // flush stream file
+    fflush(fs);
+    // unlock mutex for stdout
+    pthread_mutex_unlock(progInt->threads->stdoutMutex);
+}
+
+/**
  * @brief Create confirm protocol
  * 
  * @param serverResponse Buffer from which will referenceID be taken
@@ -31,6 +90,7 @@ void sendConfirm(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterf
     bufferResize(receiverSendMsgs, 4);
 
     ProtocolBlocks pBlocks;
+    resetProtocolBlocks(&pBlocks);
 
     // set commands values to received message id
     pBlocks.cmd_conf_lowMsgID.start = &(serverResponse->data[1]);
@@ -39,8 +99,6 @@ void sendConfirm(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterf
     pBlocks.cmd_conf_highMsgID.start = &(serverResponse->data[2]);
     pBlocks.cmd_conf_highMsgID.len = 1;
 
-    pBlocks.second.start = NULL; pBlocks.second.len = 0;
-    pBlocks.third.start = NULL; pBlocks.third.len = 0;
     pBlocks.type = cmd_CONF;
 
     bool res = assembleProtocolUDP(&pBlocks, receiverSendMsgs, progInt);
@@ -60,10 +118,7 @@ void sendConfirm(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterf
 void sendBye(ProgramInterface* progInt)
 {
     ProtocolBlocks pBlocks = {0};
-    pBlocks.zeroth.start = NULL;    pBlocks.zeroth.len = 0;
-    pBlocks.first.start = NULL;     pBlocks.first.len = 0;
-    pBlocks.second.start = NULL;    pBlocks.second.len = 0;
-    pBlocks.third.start = NULL;     pBlocks.third.len = 0;
+    resetProtocolBlocks(&pBlocks);
     pBlocks.type = cmd_EXIT;
 
     queueLock(progInt->threads->sendingQueue);
@@ -79,10 +134,6 @@ void sendBye(ProgramInterface* progInt)
     queueAddMessage(progInt->threads->sendingQueue, 
         &progInt->cleanUp->protocolToSendedByMain,
         msg_flag_BYE, cmd_EXIT);
-
-    // singal other threads to wake up if suspended
-    pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
-    pthread_cond_signal(progInt->threads->rec2SenderCond);
 
     queueUnlock(progInt->threads->sendingQueue);
 }
@@ -107,8 +158,10 @@ void sendError(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterfac
     size_t newSize = messageLen + progInt->comDetails->displayName.used + 5; 
     bufferResize(receiverSendMsgs, newSize); // resize buffer
 
-    ProtocolBlocks pBlocks;
+    ProtocolBlocks pBlocks = {0};
+    resetProtocolBlocks(&pBlocks);
     pBlocks.type = cmd_ERR;
+
     pBlocks.cmd_err_MsgContents.start = (char*) message;
     pBlocks.cmd_err_MsgContents.len = messageLen;
 
@@ -119,11 +172,14 @@ void sendError(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterfac
         res = assembleProtocolTCP(&pBlocks, receiverSendMsgs, progInt);        
     END_VARIANTS
 
+    queueLock(progInt->threads->sendingQueue);
     if(!res)
     {
         errHandling("Assembling of error protocol failed\n", 1); // TODO:
     }
-    queueAddMessagePriority(progInt->threads->sendingQueue, receiverSendMsgs, msg_flag_CONFIRM);
+    queueAddMessage(progInt->threads->sendingQueue, receiverSendMsgs, msg_flag_ERR, cmd_ERR);
+
+    queueUnlock(progInt->threads->sendingQueue);
 }
 
 /**
@@ -145,6 +201,7 @@ void handleConfirmUDP(ProgramInterface* progInt, MessageQueue* sendingQueue, u_i
     uint16_t queueTopMsgID = queueGetMessageID(sendingQueue);
     
     // if first in queue is same as incoming confirm, confirm message
+    // if(msgID != queueTopMsgID || topOfQueue->sendCount == 0)
     if(msgID != queueTopMsgID)
     { 
         queueUnlock(sendingQueue);
@@ -161,6 +218,7 @@ void handleConfirmUDP(ProgramInterface* progInt, MessageQueue* sendingQueue, u_i
 
     debugPrint(stdout, "DEBUG: Msg sended by sender was "
         "confirmed, id: %i\n", queueTopMsgID);
+    bufferPrint(topOfQueue->buffer, 9); // DEBUG:
 
     switch (getProgramState(progInt))
     {
@@ -204,7 +262,7 @@ void handleReplyUDP( ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* 
     if(getProgramState(progInt) == fsm_W84_REPLY || getProgramState(progInt) == fsm_JOIN_ATEMPT)
     {
         // replty to auth is positive
-        if(*(pBlocks->msg_reply_result.start) == 1)
+        if(*(pBlocks->msg_reply_result.start) == true)
         {
             // if auth
             if(getProgramState(progInt) == fsm_W84_REPLY)
@@ -275,7 +333,7 @@ void handleReplyUDP( ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* 
  * @param noerr Boolean value whenever dissasembling ended sucessful or not
  */
 void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlocks, MessageQueue* sendingQueue,
-    Buffer* serverResponse, MessageQueue* confirmedMsgs, Buffer* receiverSendMsgs, bool noerr)
+    Buffer* serverResponse, MessageQueue* confirmedMsgs, Buffer* receiverSendMsgs)
 {
     bool repetitiveMsg = false;
 
@@ -283,13 +341,13 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
     // Filter out resend messages
     // ------------------------------------------------------------------------
     UDP_VARIANT
-        char highMsgIDByte;
-        char lowMsgIDByte;
-        breakU16IntToBytes(&highMsgIDByte, &lowMsgIDByte, msgID);
-
         queueLock(confirmedMsgs);
+        queueLock(sendingQueue);
+
+        Message* incomingMessage = queueGetMessage(sendingQueue);
+
         // if message id queue contains received message add it to it and prerform action
-        if( pBlocks->type != msg_CONF && !queueContainsMessageId(confirmedMsgs, highMsgIDByte, lowMsgIDByte))
+        if(!queueContainsMessageId(confirmedMsgs, incomingMessage))
         {
             queueAddMessageOnlyID(confirmedMsgs, serverResponse);
         }
@@ -297,12 +355,8 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
         {
             repetitiveMsg = true;
         }
+        queueUnlock(sendingQueue);
         queueUnlock(confirmedMsgs);
-    TCP_VARIANT
-        if(!noerr)
-        {
-            sendError(serverResponse, receiverSendMsgs, progInt, "Received bad message"); //TODO:
-        }
     END_VARIANTS
 
     // ------------------------------------------------------------------------
@@ -331,6 +385,7 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
                     debugPrint(stdout, "Repetetive reply received\n");
                     return;
                 }
+
                 handleReplyUDP(progInt, msgID, pBlocks, sendingQueue, serverResponse, receiverSendMsgs);
             TCP_VARIANT
                 switch (getProgramState(progInt))
@@ -388,11 +443,7 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
             pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
             pthread_cond_signal(progInt->threads->rec2SenderCond);
 
-            if(pBlocks->msg_msg_displayname.start != NULL && pBlocks->msg_msg_MsgContents.start != NULL)
-            {
-                safePrintStdout("%s: %s\n", pBlocks->msg_msg_displayname.start, 
-                                pBlocks->msg_msg_MsgContents.start);
-            }
+            printIncomingMessage(progInt, pBlocks);
             break;
         // --------------------------------------------------------------------
         case msg_BYE: // BYE was received
@@ -404,7 +455,7 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
             END_VARIANTS
 
             // set staye to END
-            setProgramState(progInt, fsm_BYE_RECV);
+            setProgramState(progInt, fsm_END);
             // signal main to stop waiting
             pthread_cond_signal(progInt->threads->mainCond);
             break;
@@ -418,19 +469,46 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
                 // send confirm message
                 sendConfirm(serverResponse, receiverSendMsgs, progInt, msg_flag_CONFIRM);
             END_VARIANTS
+
             queueUnlock(sendingQueue);
 
             // send bye to the server
             sendBye(progInt);
+            // singal other threads to wake up if suspended
+            pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
+            pthread_cond_signal(progInt->threads->rec2SenderCond);
 
             // set state to ERR
             setProgramState(progInt, fsm_ERR);
-            safePrintStderr("ERR FROM %s: %s\n", pBlocks->msg_msg_displayname.start,
-                pBlocks->msg_err_MsgContents.start); // TODO:
+            printIncomingMessage(progInt, pBlocks);
 
             // signal main to awake
+            debugPrint(stdout, "2\n");
             pthread_cond_signal(progInt->threads->mainCond);
-        default: 
+            break;
+        default:
+            setProgramState(progInt, fsm_ERR);
+
+            queueLock(sendingQueue);
+            // delete all messages
+            queuePopAllMessages(sendingQueue);
+            queueUnlock(sendingQueue);
+
+
+            // send needed messages to server
+            UDP_VARIANT
+                sendConfirm(serverResponse, receiverSendMsgs, progInt, msg_flag_CONFIRM);
+            END_VARIANTS
+            sendError(serverResponse, receiverSendMsgs, progInt, "Unknown message format");
+            sendBye(progInt);
+
+            // singal other threads to wake up if suspended
+            pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
+            pthread_cond_signal(progInt->threads->rec2SenderCond);
+        
+            safePrintStderr("ERR: Received unknown message from server. Ending program\n");
+            // signal main to awake
+            pthread_cond_signal(progInt->threads->mainCond);
             break;
     }
 }
@@ -478,7 +556,6 @@ void* protocolReceiver(void *vargp)
     // ------------------------------------------------------------------------
     // Set up variables for receiving messages
     // ------------------------------------------------------------------------
-    bool noerr = true;
     while(getProgramState(progInt) != fsm_END)
     {
         int bytesRx = recvfrom(progInt->netConfig->openedSocket, serverResponse->data,
@@ -491,9 +568,9 @@ void* protocolReceiver(void *vargp)
         serverResponse->used = bytesRx; //set buffer length (activly used) bytes
         
         UDP_VARIANT
-            noerr = disassebleProtocolUDP(serverResponse, &pBlocks, &msgID);
+            disassebleProtocolUDP(serverResponse, &pBlocks, &msgID);
         TCP_VARIANT
-            noerr = disassebleProtocolTCP(serverResponse, &pBlocks);
+            disassebleProtocolTCP(serverResponse, &pBlocks);
         END_VARIANTS
 
         #ifdef DEBUG
@@ -512,7 +589,7 @@ void* protocolReceiver(void *vargp)
 
 
         receiverFSM(progInt, msgID, &pBlocks, progInt->threads->sendingQueue, 
-            serverResponse, confirmedMsgs, receiverSendMsgs, noerr);
+            serverResponse, confirmedMsgs, receiverSendMsgs);
     }
 
     debugPrint(stdout, "DEBUG: Receiver ended\n");

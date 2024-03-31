@@ -73,6 +73,13 @@ typedef struct ProtocolBlocks {
 } ProtocolBlocks;
 
 /**
+ * @brief Sets default values to the ProtocolBlock variable
+ * 
+ * @param pBlocks Pointer to the Protocol Blocks that should be resetted
+ */
+void resetProtocolBlocks(ProtocolBlocks* pBlocks);
+
+/**
  * @brief Assembles protocol from commands and command type into a buffer in
  * UDP format
  * 
@@ -106,7 +113,7 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
  * @param pBlocks Separated commands and values from user input
  * @param msgId Detected message ID 
  */
-bool disassebleProtocolUDP(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* msgId);
+void disassebleProtocolUDP(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* msgId);
 
 /**
  * @brief Dissassembles protocol from Buffer into commands, msgType and msgId
@@ -115,7 +122,7 @@ bool disassebleProtocolUDP(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* ms
  * @param pBlocks Separated commands and values from user input
  * @param msgId Detected message ID 
  */
-bool disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks);
+void disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks);
 
 /**
  * @brief Takes input from user (client) from buffer and break it into an
@@ -126,11 +133,10 @@ bool disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks);
  * 
  * @param buffer Input buffer containing command from user (client)
  * @param commands Array of commands where separated commands will be store 
- * @param eofDetected Signals that end of file was detected
  * @param flags Flags that will be set to message
- * @return bool Returns whenever parameters are valid
+ * @return int Returns whenever parameters are valid. On bad argument returns -1
  */
-bool userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, bool* eofDetected, msg_flags* flags);
+int userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, msg_flags* flags);
 
 
 #endif

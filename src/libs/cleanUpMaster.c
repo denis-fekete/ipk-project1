@@ -207,6 +207,9 @@ void sigintHandler(int num) {
 
     // send bye to the server
     sendBye(globalProgInt);
+    // singal other threads to wake up if suspended
+    pthread_cond_signal(globalProgInt->threads->senderEmptyQueueCond);
+    pthread_cond_signal(globalProgInt->threads->rec2SenderCond);
 
     // wait on mainMutex, sender will singal that it sended last BYE and exited
     pthread_cond_wait(globalProgInt->threads->mainCond, globalProgInt->threads->mainMutex);

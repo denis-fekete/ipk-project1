@@ -165,10 +165,15 @@ bool filterCommandsByFSM(ProtocolBlocks* pBlocks, ProgramInterface* progInt, msg
         break;;
     case cmd_EXIT:
         return true;
-    default: break;
+    case cmd_NONE:
+        return false;
+    case cmd_MISSING:
+        safePrintStderr("ERR: Bad command argument / not enough arguments.\n");
+        return false;
+    default: 
+        break;
     }
-
-    safePrintStderr("System: You are not connected to server! "
+    safePrintStderr("ERR: You are not connected to server! "
             "Use /auth to connect to server or /help for more information.\n"); 
     return false;
 }
@@ -188,28 +193,38 @@ void userCommandHandling(ProgramInterface* progInt)
     Buffer* protocolMsg = &(progInt->cleanUp->protocolToSendedByMain);
     Buffer* clientInput = &(progInt->cleanUp->clientInput);
 
-    bool canBeSended;
+    int canBeSended;
     bool eofDetected = false;
     msg_flags flags = msg_flag_NONE;
     ProtocolBlocks pBlocks;
 
     // main shall stop to work in these states: fsm_ERR, fsm_SIGINT_BYE, fsm_END
-    while (getProgramState(progInt) < fsm_ERR)
+    while (getProgramState(progInt) < fsm_EMPTY_Q_BYE)
     {
         debugPrint(stdout, "DEBUG: Main resumed\n");
+
+        // eof was detected in last loop, send bye and exit
+        if(eofDetected)
+        {
+            // set program to empty queue and leave
+            setProgramState(progInt, fsm_EMPTY_Q_BYE);
+            // add bye to the message queue
+            sendBye(progInt);
+            // wake up sender to exit
+            pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
+            continue;
+        }
+
         // --------------------------------------------------------------------
         // Convert user input into an protocol
         // --------------------------------------------------------------------
         canBeSended = false;
-        eofDetected = false;
         // Load buffer from stdin, store length of buffer
         clientInput->used = loadBufferFromStdin(clientInput, &eofDetected);
         // Separate clientCommands buffer into commands (ByteBlocks),
         // store recognized command
         flags = msg_flag_NONE;
-        canBeSended = userInputToCmds(clientInput, &pBlocks, &eofDetected, &flags);
-        // if user command cannot be sended try again
-        if(!canBeSended) { continue; }
+        canBeSended = userInputToCmds(clientInput, &pBlocks, &flags);
 
         // Filter commands by type and FSM state
         canBeSended = filterCommandsByFSM(&pBlocks, progInt, &flags);

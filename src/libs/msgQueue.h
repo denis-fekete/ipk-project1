@@ -47,7 +47,8 @@ typedef enum MessageType {
     msg_MSG = 0x04, /*plain message*/
     msg_ERR = 0xFE, /*error message*/
     msg_BYE = 0xFF, /*bye message*/
-    msg_UNKNOWN = 0xAA /*unknown message type*/
+    msg_UNKNOWN = 0xAA, /*unknown message type*/
+    msg_CORRUPTED = 0xAB /*partialy okey but corrupted msg*/
   } msg_t;
 
 /**
@@ -218,12 +219,11 @@ size_t queueLength(MessageQueue* queue);
  *  without buffers containing only msg ids
  * 
  * @param queue Pointer to the queue
- * @param highB Higer byte to compare to
- * @param lowB Lower byte to compare to
+ * @param incoming Incoming message pointer
  * @return true Message with this ID was found
  * @return false Message with this ID was not found
  */
-bool queueContainsMessageId(MessageQueue* queue, char highB, char lowB);
+bool queueContainsMessageId(MessageQueue* queue, Message* incoming);
 
 /**
  * @brief Adds ONE to sended counter of first message 

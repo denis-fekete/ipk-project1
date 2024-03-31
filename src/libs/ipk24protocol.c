@@ -16,6 +16,19 @@
 //
 // ----------------------------------------------------------------------------
 
+/**
+ * @brief Sets default values to the ProtocolBlock variable
+ * 
+ * @param pBlocks Pointer to the Protocol Blocks that should be resetted
+ */
+void resetProtocolBlocks(ProtocolBlocks* pBlocks)
+{
+    pBlocks->zeroth.start = NULL;    pBlocks->zeroth.len = 0;
+    pBlocks->first.start = NULL;     pBlocks->first.len = 0;
+    pBlocks->second.start = NULL;    pBlocks->second.len = 0;
+    pBlocks->third.start = NULL;     pBlocks->third.len = 0;
+}
+
 #define ADD_BLOCK_TO_BUFFER(dst, src)           \
     stringReplace(&(dst), src.start, src.len);  \
     ptrPos += src.len;
@@ -60,7 +73,12 @@ bool assembleProtocolUDP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         // add to expected size
         expectedSize += progInt->comDetails->channelID.used;
         break;
-    case cmd_MSG: buffer->data[0] = msg_MSG; 
+    case cmd_ERR: 
+        buffer->data[0] = (unsigned char) msg_ERR; 
+        expectedSize += progInt->comDetails->displayName.used;
+        break;
+    case cmd_MSG: 
+        buffer->data[0] = msg_MSG; 
         // add to expected size
         expectedSize += progInt->comDetails->displayName.used;
         break;
@@ -290,7 +308,7 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
  * @param pBlocks Separated commands and values from user input
  * @param msgId Detected message ID 
  */
-bool disassebleProtocolUDP(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* msgId)
+void disassebleProtocolUDP(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* msgId)
 {
     size_t index; // Temporaty helping variable to hold index in string
 
@@ -330,20 +348,24 @@ bool disassebleProtocolUDP(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* ms
     // ------------------------------------------------------------------------
     case msg_AUTH:
         // Auth: Username (x bytes)
+        debugPrint(stdout, "a\n");
         index = findZeroInString(pBlocks->msg_auth_username.start, buffer->used - (TYPE_ID_LEN));
         pBlocks->msg_auth_username.len = index;
 
+        debugPrint(stdout, "b\n");
         // Auth: Secret (x bytes)
         pBlocks->msg_auth_displayname.start = BBLOCK_END_W_ZERO_BYTE(pBlocks->msg_auth_username); // skip one zero byte
         index = findZeroInString(pBlocks->msg_auth_displayname.start, buffer->used 
                 - (TYPE_ID_LEN + pBlocks->msg_auth_username.len));
         pBlocks->msg_auth_displayname.len = index;
 
+        debugPrint(stdout, "c\n");
         // Auth: DisplayName (x bytes)
         pBlocks->msg_auth_secret.start = BBLOCK_END_W_ZERO_BYTE(pBlocks->msg_auth_displayname); // skip one zero byte
         index = findZeroInString(pBlocks->msg_auth_secret.start, buffer->used 
             - (TYPE_ID_LEN + pBlocks->msg_auth_username.len + pBlocks->msg_auth_displayname.len));
         pBlocks->msg_auth_secret.len = index;
+        debugPrint(stdout, "d\n");
         break;
     // ------------------------------------------------------------------------
     case msg_MSG:
@@ -361,13 +383,15 @@ bool disassebleProtocolUDP(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* ms
         pBlocks->first.len = index;
         break;
     // ------------------------------------------------------------------------
-    case msg_BYE: break; // No addtional bytes needed
+    case msg_BYE: // No addtional bytes needed 
+        pBlocks->type = msg_BYE;
+        break; 
     default:
-        debugPrint(stdout, "Unknown message type: %i\n", (int)pBlocks->type);
-        errHandling("ERROR: Protocol disassembler received unknown message type", 1); // TODO:change
+        pBlocks->type = msg_UNKNOWN;
+        return;
     }
 
-    return true;
+    return;
 }
 
 #define MSG_FROM_TEXT "MSG FROM "
@@ -376,7 +400,7 @@ bool disassebleProtocolUDP(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* ms
 #define REPLY_OK_TEXT "OK IS "
 #define REPLY_NOK_TEXT "NOK IS "
 #define BYE_TEXT "BYE"
-#define ERR_FROM_TEXT "ERR FROM"
+#define ERR_FROM_TEXT "ERR FROM "
 
 #define LEN_OF(constString) (sizeof(constString) - 1)
 /**
@@ -386,26 +410,31 @@ bool disassebleProtocolUDP(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* ms
  * @param pBlocks Separated commands and values from user input
  * @param msgId Detected message ID 
  */
-bool disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks)
+void disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks)
 {
     size_t index;
 
     if ( strncmp(buffer->data, MSG_FROM_TEXT, LEN_OF(MSG_FROM_TEXT)) == 0 )
     {
-        // find end of displayname after sizeof("MSG FROM ") =  len: 9 (\0 not counted)
         pBlocks->msg_msg_displayname.start = &(buffer->data[LEN_OF(MSG_FROM_TEXT)]);
+        // find end of displayname after sizeof("MSG FROM ") =  len: 9 (\0 not counted)
         index = findBlankCharInString(pBlocks->msg_msg_displayname.start, buffer->used - LEN_OF(MSG_FROM_TEXT));
         pBlocks->msg_msg_displayname.len = index;
         
         // check if there is " IS " correctly typed after {displayname}
         if(strncmp(BBLOCK_END(pBlocks->msg_msg_displayname), IS_TEXT, LEN_OF(IS_TEXT)) != 0)
         {
-            return false;
+            pBlocks->type = msg_CORRUPTED;
+            return;
         }
 
+        // set start of the message contets after displayname and add " IS " to it
+        pBlocks->msg_msg_MsgContents.start = 
+            &(pBlocks->msg_msg_displayname.start[pBlocks->msg_msg_displayname.len + 
+            LEN_OF(IS_TEXT)]);
+
         // find end of message contents
-        pBlocks->msg_msg_MsgContents.start = BBLOCK_END(pBlocks->msg_msg_displayname);
-        index = findBlankCharInString(pBlocks->msg_msg_MsgContents.start, 
+        index = findNewLineInString(pBlocks->msg_msg_MsgContents.start, 
             buffer->used - LEN_OF(MSG_FROM_TEXT) - pBlocks->msg_msg_displayname.len);
             
         pBlocks->msg_msg_MsgContents.len = index;
@@ -428,7 +457,7 @@ bool disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks)
             pBlocks->msg_reply_result_bool = false; 
 
         }
-        else { return false; }
+        else { pBlocks->type = msg_CORRUPTED; return; }
 
         // find end of message contents after sizeof("{RESULT} IS "), + sizeof(" IS ") = len: 4 (\0 not counted)
         pBlocks->msg_reply_MsgContents.start = 
@@ -448,20 +477,25 @@ bool disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks)
     }
     else if ( strncmp(buffer->data, ERR_FROM_TEXT, LEN_OF(ERR_FROM_TEXT)) == 0 )
     {
-        // find end of displayname after sizeof("MSG FROM ") =  len: 9 (\0 not counted)
         pBlocks->msg_err_displayname.start = &(buffer->data[LEN_OF(MSG_FROM_TEXT)]);
+        // find end of displayname after sizeof("MSG FROM ") =  len: 9 (\0 not counted)
         index = findBlankCharInString(pBlocks->msg_err_displayname.start, buffer->used - LEN_OF(MSG_FROM_TEXT));
         pBlocks->msg_err_displayname.len = index;
         
         // check if there is " IS " correctly typed after {displayname}
         if(strncmp(BBLOCK_END(pBlocks->msg_err_displayname), IS_TEXT, LEN_OF(IS_TEXT)) != 0)
         {
-            return false;
+            pBlocks->type = msg_CORRUPTED;
+            return;
         }
 
+        // set start of the message contets after displayname and add " IS " to it
+        pBlocks->msg_err_MsgContents.start = 
+            &(pBlocks->msg_err_displayname.start[pBlocks->msg_err_displayname.len + 
+            LEN_OF(IS_TEXT)]);
+
         // find end of message contents
-        pBlocks->msg_err_MsgContents.start = BBLOCK_END(pBlocks->msg_err_displayname);
-        index = findBlankCharInString(pBlocks->msg_err_MsgContents.start, 
+        index = findNewLineInString(pBlocks->msg_err_MsgContents.start, 
             buffer->used - LEN_OF(MSG_FROM_TEXT) - pBlocks->msg_err_displayname.len);
             
         pBlocks->msg_err_MsgContents.len = index;
@@ -469,10 +503,11 @@ bool disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks)
     }
     else
     {
-        errHandling("Unknown received message", 1); //TODO:
+        pBlocks->type = msg_UNKNOWN;
+        return;
     }
 
-    return true;
+    return;
 }
 
 /**
@@ -549,7 +584,10 @@ bool allowedCharsInMessage(char input)
  */
 bool controlWord(BytesBlock* wordBlock, const size_t maxLen, unsigned char typeOfWord)
 {
-
+    if(wordBlock->len <= 0)
+    {
+        return false;
+    }
     // check if word has correct length
     if(wordBlock->len > maxLen)
     {
@@ -631,15 +669,15 @@ bool controlWord(BytesBlock* wordBlock, const size_t maxLen, unsigned char typeO
  * 
  * This is instead of GOTO
  */
-#define TRY_GET_WORD(cond) if (!(cond)) {               \
-    pBlocks->cmd_msg_MsgContents.start = buffer->data;  \
-    pBlocks->cmd_msg_MsgContents.len = buffer->used;    \
-    pBlocks->type = cmd_MSG;                            \
-    /*checks if input is alligable to be message if it cannot be command*/                      \
-    if(!controlWord(&pBlocks->cmd_msg_MsgContents, 14000, ToW_MessageContent)) { return false; }\
-    return true;                                        \
+#define TRY_GET_WORD(cond) if (!(cond)) {           \
+        pBlocks->type = cmd_MISSING;                \
+        return false;                               \
     }
 
+/**
+ * @brief Sets correct block type and exits function with false 
+ */
+#define IF_ERR_SET_CMDTYPE(cmdT) if(error == -1) { pBlocks->type = cmdT; return false; }
 
 /**
  * @brief Takes input from user (client) from buffer and break it into an
@@ -650,11 +688,10 @@ bool controlWord(BytesBlock* wordBlock, const size_t maxLen, unsigned char typeO
  * 
  * @param buffer Input buffer containing command from user (client)
  * @param commands Array of commands where separated commands will be store 
- * @param eofDetected Signals that end of file was detected
  * @param flags Flags that will be set to message
  * @return bool Returns whenever parameters are valid
  */
-bool userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, bool* eofDetected, msg_flags* flags)
+int userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, msg_flags* flags)
 {
     // If buffer is not filled skip
     if(buffer->used <= 0) { pBlocks->type = cmd_NONE; return false; }
@@ -663,20 +700,19 @@ bool userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, bool* eofDetected,
     // get command into ProtocolBlocks
     BytesBlock cmd = {.start=buffer->data, .len=index};
     pBlocks->cmd_command = cmd;
-
+    
     // reset byteblocks
     BytesBlock first = {NULL, 0}, second = {NULL, 0}, third = {NULL, 0};
     pBlocks->first = first;
     pBlocks->second = second;
     pBlocks->third = third;
+    pBlocks->type = cmd_NONE;
+
+    long error = 0;
 
     int tmp = -1;
 
-    if(*eofDetected)
-    {
-        pBlocks->type = cmd_EXIT;
-    }
-    else if(strncmp(cmd.start, "/auth", cmd.len) == 0)
+    if(strncmp(cmd.start, "/auth", cmd.len) == 0)
     {
         // separate words and store in into BytesBlocks
         TRY_GET_WORD( getWord(&first, &(cmd.start[cmd.len]), buffer->used - (cmd.len)) )
@@ -706,8 +742,11 @@ bool userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, bool* eofDetected,
         // update first start position
         first.start = &(first.start[index]);
         // find end of line in string
-        first.len = findNewLineInString(first.start, buffer->used - cmd.len);
+        error = findNewLineInString(first.start, buffer->used - cmd.len);
 
+        IF_ERR_SET_CMDTYPE(cmd_MISSING);
+
+        first.len = (size_t) error;
 
         // store information into correct ProtocolBlocks parts
         // if tmp == 0 join was provided
@@ -740,9 +779,9 @@ bool userInputToCmds(Buffer* buffer, ProtocolBlocks* pBlocks, bool* eofDetected,
         // store information into correct ProtocolBlocks parts
         pBlocks->cmd_msg_MsgContents.start = buffer->data;
         pBlocks->cmd_msg_MsgContents.len = buffer->used;
-        pBlocks->type = cmd_MSG;
-
         if(!controlWord(&pBlocks->cmd_msg_MsgContents, 14000, ToW_MessageContent)) { return false; }
+
+        pBlocks->type = cmd_MSG;
     }
 
     return true;

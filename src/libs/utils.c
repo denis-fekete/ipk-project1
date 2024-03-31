@@ -42,7 +42,7 @@ bool getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize)
 {
     if(block == NULL || startOfLastWord == NULL || bufferSize <= 0)
     {
-        errHandling("Invalid input variables in fuction getWord()", 1); // TODO: change err code
+        return false;
     }
 
     size_t index = skipBlankCharsInString(startOfLastWord, bufferSize);
@@ -96,7 +96,7 @@ long findNewLineInString(char* string, size_t len)
     size_t index = 0;
     for(; index <= len ; index++)
     {
-        if(string[index] == '\0' || string[index] == '\n')
+        if(string[index] == '\0' || string[index] == '\n' || string[index] == '\r')
         { 
             return index;
         }
@@ -151,7 +151,7 @@ long findZeroInString(char* string, size_t len)
 
     if(index <= 0)
     {
-        return errHandling("Intrnal error in findZeroInString()", 1); // TODO: change error code
+        return errHandling("Internal error in findZeroInString()", 1); // TODO: change error code
     }
     else { return index; }
 }

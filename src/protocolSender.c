@@ -22,11 +22,11 @@
 
 /**
  * @brief Filters messages to by send by currecnt state of program and by
- * MessageType. 
+ * MessageType, also updates current state of program  
  * 
  * @param progInt Pointer to the ProgramInterface 
  */
-void filterMessagesByFSM(ProgramInterface* progInt)
+void logicFSM(ProgramInterface* progInt)
 {
     MessageQueue* sendingQueue = progInt->threads->sendingQueue;
 
@@ -45,6 +45,12 @@ void filterMessagesByFSM(ProgramInterface* progInt)
     case fsm_AUTH_W82_BE_SENDED: /*authentication is waiting(W8) to(2) be sended*/
     case fsm_AUTH_SENDED: /*authetication was successfully sended*/
     case fsm_W84_REPLY: /*auth has been confirmed, waiting for reply*/
+
+        // if authentication is wating to be sended, switch state to sended
+        if(flags == msg_flag_AUTH)
+        {
+            setProgramState(progInt, fsm_AUTH_SENDED);
+        }
         // if program is not in open state and message to be send is not auth 
         if(msgType != msg_AUTH && flags != msg_flag_NOK_REPLY)
         {
@@ -61,7 +67,7 @@ void filterMessagesByFSM(ProgramInterface* progInt)
         }
         // if message is AUTH and was already confirmed, ...
         // wait to prevent repetitive auth sending, and if message wasnt rejected
-        else if(msgType == msg_AUTH && msgToBeSend->confirmed && flags != msg_flag_REJECTED)
+        else if(msgType == msg_AUTH && msgToBeSend->confirmed && msgToBeSend->sendCount > 0)
         {
             #ifdef DEBUG
                 debugPrint(stdout, "DEBUG: AUTH message blocked because of FSM state (state: %i)\n", getProgramState(progInt));
@@ -72,7 +78,7 @@ void filterMessagesByFSM(ProgramInterface* progInt)
             pthread_cond_wait(progInt->threads->rec2SenderCond, 
                 progInt->threads->rec2SenderMutex);
             // call filter again
-            filterMessagesByFSM(progInt);
+            logicFSM(progInt);
             queueLock(sendingQueue);
         }
         break;
@@ -87,24 +93,43 @@ void filterMessagesByFSM(ProgramInterface* progInt)
             pthread_cond_signal(progInt->threads->mainCond);
         }
         break;
+    // ------------------------------------------------------------------------
     case fsm_OPEN:
         switch(msgType)
         {
             case msg_AUTH:
                 // TODO: look if okey with assigment
-                safePrintStderr("System: You are already autheticated, message will be ignored.");
+                safePrintStderr("ERR: You are already autheticated, this message will be ignored.");
                 queuePopMessage(sendingQueue);
                 break;
             case msg_JOIN:
-                UDP_VARIANT
-                    setProgramState(progInt, fsm_JOIN_ATEMPT);
-                TCP_VARIANT
-                END_VARIANTS
+                setProgramState(progInt, fsm_JOIN_ATEMPT);
                 break;
             default:
                 break;
         }
         break;
+    // ------------------------------------------------------------------------
+    case fsm_ERR_W84_CONF:
+        case fsm_ERR:
+            // sended message flags is bye
+            if(flags == msg_flag_BYE)
+            {
+                // end set state to end
+                setProgramState(progInt, fsm_END);
+                pthread_cond_signal(progInt->threads->mainCond);
+            }
+            else if(flags == msg_flag_ERR)
+            {
+                UDP_VARIANT
+                    setProgramState(progInt, fsm_ERR_W84_CONF);
+                END_VARIANTS
+            }
+            else if(flags == msg_flag_CONFIRM) {} // if sended is confirm
+            else
+            {
+                errHandling("ERR: Sender send message that is not BYE in ERROR state\n", 1); //TODO:
+            }
     default:
         break;
     }
@@ -139,7 +164,7 @@ void filterResentMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
                 case fsm_AUTH_SENDED: /*authetication was successfully sended*/
                 case fsm_W84_REPLY: /*auth has been confirmed, waiting for reply*/
                 case fsm_W84_REPLY_CONF: /*reply received, waiting for confirm to be sended*/
-                    safePrintStderr("System: Authetication message request timed out. Please try again.\n");
+                    safePrintStderr("ERR: Authetication message request timed out. Please try again.\n");
                     setProgramState(progInt, fsm_START);
                     // signal main to wake up
                     pthread_cond_signal(progInt->threads->mainCond);
@@ -201,7 +226,6 @@ void* protocolSender(void* vargp)
         // --------------------------------------------------------------------
         // Filter out confirmed messages or messages with too many resends
         // --------------------------------------------------------------------
-        debugPrint(stdout, "DEBUG: Sender at start of the loop\n");
         UDP_VARIANT
             queueLock(sendingQueue);
 
@@ -216,6 +240,7 @@ void* protocolSender(void* vargp)
         // if queue is empty wait until it is filled
         if(queueIsEmpty(sendingQueue))
         {
+            debugPrint(stdout, "DEBUG: Sender: queue is empty\n");
             // if queue is empty and state is empty queue and bye, end
             if(getProgramState(progInt) == fsm_EMPTY_Q_BYE || getProgramState(progInt) == fsm_SIGINT_BYE)
             {
@@ -247,7 +272,7 @@ void* protocolSender(void* vargp)
 
         queueLock(sendingQueue);
 
-        filterMessagesByFSM(progInt);
+        logicFSM(progInt);
 
         Message* msgToBeSend = queueGetMessage(sendingQueue);
 
@@ -297,7 +322,7 @@ void* protocolSender(void* vargp)
             }
         TCP_VARIANT
             // if it was message, signal main
-            if(msgToBeSend->type == msg_MSG || msgToBeSend->type == msg_JOIN)
+            if(msgToBeSend->type == msg_MSG)
             {
                 // ping main to work again
                 pthread_cond_signal(progInt->threads->mainCond);
@@ -307,41 +332,6 @@ void* protocolSender(void* vargp)
         END_VARIANTS
 
         queueUnlock(sendingQueue);
-
-        
-        // --------------------------------------------------------------------
-        // Update FSM
-        // --------------------------------------------------------------------
-        
-        switch (getProgramState(progInt))
-        {
-        case fsm_AUTH_W82_BE_SENDED:
-            // if authentication is wating to be sended, switch state to sended
-            if(sendedMessageFlags == msg_flag_AUTH)
-            {
-                setProgramState(progInt, fsm_AUTH_SENDED);
-            }
-            else
-            {
-                errHandling("Sender sended message that isn't AUTH in non-open state", 1); // TODO:
-            }
-            break;
-        case fsm_ERR:
-            // sended message flags is bye
-            if(sendedMessageFlags == msg_flag_BYE)
-            {
-                // end set state to end
-                setProgramState(progInt, fsm_END);
-                pthread_cond_signal(progInt->threads->mainCond);
-            }
-            else if(sendedMessageFlags == msg_flag_CONFIRM) {} // if sended is confirm
-            else
-            {
-                errHandling("ERR: Sender send message that is not BYE in ERROR state\n", 1); //TODO:
-            }
-        default:
-            break;
-        }
 
         // After message has been sended wait udpTimeout time until 
         // attempting to resend it / again
