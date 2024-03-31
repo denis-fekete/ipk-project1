@@ -92,7 +92,7 @@ void filterMessagesByFSM(ProgramInterface* progInt)
         {
             case msg_AUTH:
                 // TODO: look if okey with assigment
-                safePrintStdout("System: You are already autheticated, message will be ignored.");
+                safePrintStderr("System: You are already autheticated, message will be ignored.");
                 queuePopMessage(sendingQueue);
                 break;
             case msg_JOIN:
@@ -139,7 +139,7 @@ void filterResentMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
                 case fsm_AUTH_SENDED: /*authetication was successfully sended*/
                 case fsm_W84_REPLY: /*auth has been confirmed, waiting for reply*/
                 case fsm_W84_REPLY_CONF: /*reply received, waiting for confirm to be sended*/
-                    safePrintStdout("System: Authetication message request timed out. Please try again.\n");
+                    safePrintStderr("System: Authetication message request timed out. Please try again.\n");
                     setProgramState(progInt, fsm_START);
                     // signal main to wake up
                     pthread_cond_signal(progInt->threads->mainCond);
@@ -148,7 +148,7 @@ void filterResentMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
                     break;
                 }
             } else {
-                safePrintStdout("System: Request timed out. Last message was not sent.\n");   
+                safePrintStderr("System: Request timed out. Last message was not sent.\n");   
                 debugPrint(stdout, "Count: %i\n", queueGetSendedCounter(sendingQueue));
                 bufferPrint(msgToBeSend->buffer, 1);
             }
@@ -326,7 +326,19 @@ void* protocolSender(void* vargp)
                 errHandling("Sender sended message that isn't AUTH in non-open state", 1); // TODO:
             }
             break;
-        
+        case fsm_ERR:
+            // sended message flags is bye
+            if(sendedMessageFlags == msg_flag_BYE)
+            {
+                // end set state to end
+                setProgramState(progInt, fsm_END);
+                pthread_cond_signal(progInt->threads->mainCond);
+            }
+            else if(sendedMessageFlags == msg_flag_CONFIRM) {} // if sended is confirm
+            else
+            {
+                errHandling("ERR: Sender send message that is not BYE in ERROR state\n", 1); //TODO:
+            }
         default:
             break;
         }

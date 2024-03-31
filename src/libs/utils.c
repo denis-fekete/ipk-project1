@@ -59,7 +59,6 @@ bool getWord(BytesBlock* block, char* startOfLastWord, size_t bufferSize)
 //
 // ----------------------------------------------------------------------------
 
-
 /**
  * @brief Finds first blank character (spaces ' ' and tabulators '\t') 
  * in string and returns index of last character before blank character
@@ -203,7 +202,6 @@ void stringReplace(char* dst, char* src, size_t len)
     #endif
 }
 
-
 // ----------------------------------------------------------------------------
 //
 // ----------------------------------------------------------------------------
@@ -249,4 +247,55 @@ uint16_t convert2BytesToU16Int(char low, char high)
 {
     // Join bytes into one number
     return (low +  (high << 8)); 
+}
+
+/**
+ * @brief Compares two string whenever they are same, letters are not case 
+ * sensitive.
+ * 
+ * Example: strcmpCaseIns("aaa", "aAA", 3) // will be true 
+ * 
+ * @param str1 pointer to the first string
+ * @param str2 pointer to the second string
+ * @param len number of characters that will be compared
+ * @return true String are same or are same but with different case 
+ * "sensitiveness"
+ * @return false String are not same 
+ */
+#define IS_LOWERCASE(c) (c >= 'a' && c <= 'z')
+#define IS_UPPERCASE(c) (c >= 'A' && c <= 'Z')
+bool strcmpCaseIns(char* str1, char* str2, size_t len)
+{
+    // constant for conversion between letters
+    const char letterCaseConst = 'a' - 'A';
+    for(size_t i = 0; i < len; i++)
+    {
+        // if characters are not same
+        if(str1[i] != str2[i])
+        {
+            // if one is uppercase and another is lower case
+            if( IS_LOWERCASE(str1[i]) && IS_UPPERCASE(str2[i]) )
+            {
+                // add letterconst to lowercase, if they are not equal return false
+                if(str2[i] + letterCaseConst != str1[i])
+                {
+                    return false;
+                }
+            }
+            else if( IS_UPPERCASE(str1[i]) && IS_LOWERCASE(str2[i]) )
+            {
+                // add letterconst to lowercase, if they are not equal return false
+                if(str1[i] + letterCaseConst != str2[i])
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }

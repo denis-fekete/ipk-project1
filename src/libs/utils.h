@@ -181,6 +181,21 @@ void breakU16IntToBytes(char* high, char* low, uint16_t msgCounter);
 uint16_t convert2BytesToU16Int(char high, char low);
 
 /**
+ * @brief Compares two string whenever they are same, letters are not case 
+ * sensitive.
+ * 
+ * Example: strcmpCaseIns("aaa", "aAA", 3) // will be true 
+ * 
+ * @param str1 pointer to the first string
+ * @param str2 pointer to the second string
+ * @param len number of characters that will be compared
+ * @return true String are same or are same but with different case 
+ * "sensitiveness"
+ * @return false String are not same 
+ */
+bool strcmpCaseIns(char* str1, char* str2, size_t len);
+
+/**
  * @brief Macro for safe printing using "global" stdoutMutex.
  * 
  * Uses fflush after message has been written

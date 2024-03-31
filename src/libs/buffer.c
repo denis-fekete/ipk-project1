@@ -39,7 +39,6 @@ void bufferInit(Buffer* buffer)
  */
 void bufferResize(Buffer* buffer, size_t newSize)
 {
-    debugPrint(stdout, "DEBUG: New Buffer size (new: %li, old: %li)\n", newSize, buffer->allocated);
     if(newSize <= buffer->allocated)
     {
         return;

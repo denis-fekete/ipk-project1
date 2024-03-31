@@ -38,6 +38,13 @@ void sendError(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterfac
 void sendConfirm(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterface* progInt, msg_flags flags);
 
 /**
+ * @brief Creates BYE message and sends it to server
+ * 
+ * @param progInt Pointer to program interface
+ */
+void sendBye(ProgramInterface* progInt);
+
+/**
  * @brief Initializes protocol receiving functionality 
  * 
  * @param vargp arguments

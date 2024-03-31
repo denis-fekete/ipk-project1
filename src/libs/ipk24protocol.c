@@ -108,7 +108,7 @@ bool assembleProtocolUDP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         // check if displayname is stored
         if(progInt->comDetails->displayName.data == NULL)
         { 
-            safePrintStdout("System: Displayname not provided, cannot join! Use /help for help.\n");
+            safePrintStderr("System: Displayname not provided, cannot join! Use /help for help.\n");
             return false; // message cannot be sent
         }
         
@@ -122,7 +122,7 @@ bool assembleProtocolUDP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         // check if displayname is stored
         if(progInt->comDetails->displayName.data == NULL)
         { 
-            safePrintStdout("System: ChannelID not provided, cannot rename!"
+            safePrintStderr("System: ChannelID not provided, cannot rename!"
                 "(Did you use /auth before this commands?). Use /help for help.\n");
             return false;
         }
@@ -222,7 +222,7 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         // check if displayname is stored
         if(progInt->comDetails->displayName.data == NULL)
             { 
-                safePrintStdout("System: ChannelID not provided, cannot rename!"
+                safePrintStderr("System: ChannelID not provided, cannot rename!"
                     "(Did you use /auth before this commands?). Use /help for help.\n");
                 return false; // TODO: check what  to do in this state
         }
@@ -247,7 +247,7 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         // check if displayname is stored
         if(progInt->comDetails->displayName.data == NULL)
         { 
-            safePrintStdout("System: Displayname not provided, cannot join! Use /help for help.\n");
+            safePrintStderr("System: Displayname not provided, cannot join! Use /help for help.\n");
             return false; // message cannot be sent
         }
 
@@ -465,7 +465,7 @@ bool disassebleProtocolTCP(Buffer* buffer, ProtocolBlocks* pBlocks)
             buffer->used - LEN_OF(MSG_FROM_TEXT) - pBlocks->msg_err_displayname.len);
             
         pBlocks->msg_err_MsgContents.len = index;
-        pBlocks->type = msg_MSG;
+        pBlocks->type = msg_ERR;
     }
     else
     {
@@ -490,7 +490,8 @@ bool allowedCharsInCredentials(char input)
         return true;
     else if(input >= '0' && input <= '9')
         return true;
-
+    else if(input == '-')
+        return true;
     #ifdef DEBUG // allow "." in debug mode
         if(input == '.')
         {
@@ -512,6 +513,7 @@ bool allowedCharsInName(char input)
 {
     if(input >= 0x21 && input <= 0x7E)
         return true;
+
     return false;
 }  
 
@@ -526,6 +528,7 @@ bool allowedCharsInMessage(char input)
 {
     if(input >= 0x20 && input <= 0x7E)
         return true;
+        
     return false;
 }  
 

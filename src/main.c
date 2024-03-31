@@ -168,7 +168,7 @@ bool filterCommandsByFSM(ProtocolBlocks* pBlocks, ProgramInterface* progInt, msg
     default: break;
     }
 
-    safePrintStdout("System: You are not connected to server! "
+    safePrintStderr("System: You are not connected to server! "
             "Use /auth to connect to server or /help for more information.\n"); 
     return false;
 }
@@ -193,7 +193,8 @@ void userCommandHandling(ProgramInterface* progInt)
     msg_flags flags = msg_flag_NONE;
     ProtocolBlocks pBlocks;
 
-    while (getProgramState(progInt) != fsm_SIGINT_BYE && getProgramState(progInt) != fsm_END)
+    // main shall stop to work in these states: fsm_ERR, fsm_SIGINT_BYE, fsm_END
+    while (getProgramState(progInt) < fsm_ERR)
     {
         debugPrint(stdout, "DEBUG: Main resumed\n");
         // --------------------------------------------------------------------
@@ -234,7 +235,6 @@ void userCommandHandling(ProgramInterface* progInt)
         if(queueIsEmpty(progInt->threads->sendingQueue)) { signalSender = true; }
         
         queueAddMessage(progInt->threads->sendingQueue, protocolMsg, flags, pBlocks.type);
-        debugPrint(stdout, "DEBUG: Main added message to the queue (flags: %i)\n", flags);
         // signal sender if he is waiting because queue is empty
         if(signalSender)
         {

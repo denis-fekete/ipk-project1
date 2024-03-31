@@ -53,6 +53,41 @@ void sendConfirm(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterf
 }
 
 /**
+ * @brief Creates BYE message and sends it to server
+ * 
+ * @param progInt Pointer to program interface
+ */
+void sendBye(ProgramInterface* progInt)
+{
+    ProtocolBlocks pBlocks = {0};
+    pBlocks.zeroth.start = NULL;    pBlocks.zeroth.len = 0;
+    pBlocks.first.start = NULL;     pBlocks.first.len = 0;
+    pBlocks.second.start = NULL;    pBlocks.second.len = 0;
+    pBlocks.third.start = NULL;     pBlocks.third.len = 0;
+    pBlocks.type = cmd_EXIT;
+
+    queueLock(progInt->threads->sendingQueue);
+
+    // assemble BYE protocol
+    if(progInt->netConfig->protocol == prot_UDP) {
+        assembleProtocolUDP(&pBlocks, &progInt->cleanUp->protocolToSendedByMain, progInt);
+    } else if(progInt->netConfig->protocol == prot_TCP) {
+        assembleProtocolTCP(&pBlocks, &progInt->cleanUp->protocolToSendedByMain, progInt);
+    }
+
+    // add message to the queue
+    queueAddMessage(progInt->threads->sendingQueue, 
+        &progInt->cleanUp->protocolToSendedByMain,
+        msg_flag_BYE, cmd_EXIT);
+
+    // singal other threads to wake up if suspended
+    pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
+    pthread_cond_signal(progInt->threads->rec2SenderCond);
+
+    queueUnlock(progInt->threads->sendingQueue);
+}
+
+/**
  * @brief Create err protocol
  * 
  * @param serverResponse Buffer from which will referenceID be taken
@@ -373,18 +408,28 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
             // signal main to stop waiting
             pthread_cond_signal(progInt->threads->mainCond);
             break;
+        // --------------------------------------------------------------------
         case msg_ERR:
+            queueLock(sendingQueue);
+
+            // delete all messages
+            queuePopAllMessages(sendingQueue);
             UDP_VARIANT
                 // send confirm message
-                queueLock(sendingQueue);
                 sendConfirm(serverResponse, receiverSendMsgs, progInt, msg_flag_CONFIRM);
-                queueUnlock(sendingQueue);
             END_VARIANTS
+            queueUnlock(sendingQueue);
 
-            // set state to END
-            setProgramState(progInt, fsm_END);
+            // send bye to the server
+            sendBye(progInt);
+
+            // set state to ERR
+            setProgramState(progInt, fsm_ERR);
             safePrintStderr("ERR FROM %s: %s\n", pBlocks->msg_msg_displayname.start,
                 pBlocks->msg_err_MsgContents.start); // TODO:
+
+            // signal main to awake
+            pthread_cond_signal(progInt->threads->mainCond);
         default: 
             break;
     }
