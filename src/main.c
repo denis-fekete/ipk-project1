@@ -33,6 +33,21 @@ ProgramInterface* globalProgInt;
 // ----------------------------------------------------------------------------
 
 /**
+ * @brief Prints msg and exits program with errorCode
+ * 
+ * @param msg Message to be printed
+ * @param errorCode Error code that will be used as exit code
+ * @return int Returns 0 (for anti-compiler errors) 
+ */
+int errHandling(const char* msg, int errorCode)
+{
+    fprintf(stderr, "ERR: %s\n", msg);
+
+    exit(errorCode);
+    return 0;
+}
+
+/**
  * @brief Processes arguments provided by user
  * 
  * @param argc Number of arguments given
@@ -287,7 +302,8 @@ int main(int argc, char* argv[])
     ProgramInterface* progInt = (ProgramInterface*) calloc(1, sizeof(ProgramInterface));
     if(progInt == NULL)
     {
-        errHandling("Failed to initialize program interface", 1);
+        fprintf(stderr, "Failed to initialize program interface");
+        exit(1);
     }
 
     // initialize Program Interface

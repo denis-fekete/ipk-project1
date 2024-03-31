@@ -151,32 +151,26 @@ void filterResentMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
         // if message was send more than maximum udp retries
         if( queueGetSendedCounter(sendingQueue) > progInt->netConfig->udpMaxRetries )
         {
-            // check if discarded message wasn't an auth message
-            msg_flags flags = queueGetMessageFlags(sendingQueue);
-            
-            // if msg to be deleted is auth
-            if(flags == msg_flag_AUTH)
-            {
-                switch (getProgramState(progInt))
-                {
-                case fsm_START:
-                case fsm_AUTH_W82_BE_SENDED: /*authentication is waiting(W8) to(2) be sended*/
-                case fsm_AUTH_SENDED: /*authetication was successfully sended*/
-                case fsm_W84_REPLY: /*auth has been confirmed, waiting for reply*/
-                case fsm_W84_REPLY_CONF: /*reply received, waiting for confirm to be sended*/
-                    safePrintStderr("ERR: Authetication message request timed out. Please try again.\n");
-                    setProgramState(progInt, fsm_START);
-                    // signal main to wake up
-                    pthread_cond_signal(progInt->threads->mainCond);
-                    break;
-                default:
-                    break;
-                }
-            } else {
-                safePrintStderr("System: Request timed out. Last message was not sent.\n");   
-                debugPrint(stdout, "Count: %i\n", queueGetSendedCounter(sendingQueue));
-                bufferPrint(msgToBeSend->buffer, 1);
-            }
+            // print error message
+            safePrintStderr("ERR: Request timed out.\n");
+            // clear message queue
+            queuePopAllMessages(sendingQueue);
+            // set program into error state
+            setProgramState(progInt, fsm_ERR);
+
+            queueUnlock(sendingQueue);
+            // add error message to queue
+            sendError(msgToBeSend->buffer, 
+                &(progInt->cleanUp->protocolToSendedByReceiver), 
+                progInt, "Request timed out");
+            // add bye message to queue
+            sendBye(progInt);
+
+            // signal main to end
+            pthread_cond_signal(progInt->threads->mainCond);
+
+            queueLock(sendingQueue);
+            break;
         }
         else if(msgToBeSend->msgFlags == msg_flag_REJECTED)
         {

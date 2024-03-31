@@ -10,19 +10,6 @@
 
 #include "utils.h"
 
-/**
- * @brief Prints msg and exits program with errorCode
- * 
- * @param msg Message to be printed
- * @param errorCode Error code that will be used as exit code
- * @return int Returns 0 (for anti-compiler errors) 
- */
-int errHandling(const char* msg, int errorCode)
-{
-    fprintf(stderr, "ERR: %s\n", msg);
-    exit(errorCode);
-    return 0;
-}
 
 // ----------------------------------------------------------------------------
 //

@@ -16,6 +16,7 @@
 #include "pthread.h"
 
 #include "libs/ipk24protocol.h"
+#include "protocolReceiver.h"
 
 /**
  * @brief Initializes protocol sending functionality 

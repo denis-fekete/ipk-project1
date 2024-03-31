@@ -298,7 +298,7 @@ void handleReplyUDP( ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* 
                 // set program state back to start
                 setProgramState(progInt, fsm_START);
             }
-            // TODO: check if this is
+
             if(getProgramState(progInt) == fsm_JOIN_ATEMPT)
             {
                 setProgramState(progInt, fsm_OPEN);

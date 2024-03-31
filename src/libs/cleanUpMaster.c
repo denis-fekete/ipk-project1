@@ -112,6 +112,7 @@ void programInterfaceInit(ProgramInterface* pI)
     bufferInit(&(cleanUp->clientInput));
     bufferInit(&(cleanUp->protocolToSendedByMain));
     bufferInit(&(cleanUp->protocolToSendedByReceiver));
+    bufferInit(&(cleanUp->protocolToSendedBySender));
     bufferInit(&(cleanUp->serverResponse));
 
     MessageQueue* confirmedMessages = (MessageQueue*) malloc(sizeof(MessageQueue));
@@ -137,6 +138,7 @@ void programInterfaceDestroy(ProgramInterface* pI)
     bufferDestroy(&(pI->cleanUp->clientInput));
     bufferDestroy(&(pI->cleanUp->protocolToSendedByMain));
     bufferDestroy(&(pI->cleanUp->protocolToSendedByReceiver));
+    bufferDestroy(&(pI->cleanUp->protocolToSendedBySender));
     bufferDestroy(&(pI->cleanUp->serverResponse));
     queueDestroy(pI->cleanUp->confirmedMessages);
     free(pI->cleanUp);
@@ -195,7 +197,6 @@ void programInterfaceDestroy(ProgramInterface* pI)
  */
 void sigintHandler(int num) {
     if(num){} // anti-error--compiler
-
     // set program state to SIGINT_BYE, which will lead to main thread to exit
     setProgramState(globalProgInt, fsm_SIGINT_BYE);
     // signal main thread to wake up if suspended

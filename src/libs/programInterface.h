@@ -64,6 +64,7 @@ typedef struct CleanUp
     Buffer clientInput;
     Buffer protocolToSendedByMain;
     Buffer protocolToSendedByReceiver;
+    Buffer protocolToSendedBySender;
     Buffer serverResponse;
     struct MessageQueue* confirmedMessages;
 } CleanUp;
