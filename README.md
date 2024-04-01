@@ -1,4 +1,6 @@
 # IPK24CHAT-Client
+**Author:**
+Denis Fekete ([xfeket01@vutbr.cz](mailto:xfeket01@vutbr.cz))
 
 ## Description
 IPK24CHAT-client is a command-line application for communicating with the server that is using the same (IPK24CHAT) protocol. Protocol is based on UDP or TCP protocol which can be changed with program arguments when the program is being started.
@@ -55,6 +57,10 @@ The client can perform actions based on the provided commands. List of commands:
 - `/help` -> prints help menu
 - `/rename {displayname}` -> changes user displayname
 - `/exit` -> exits program
+
+
+## Testing
+Testing was done using manual tests found in *tests/* directory. These tests create a fake server that is receiving messages and sending back an exact copy of what it received. Due to the limits of this implementation testing is not very deep and does not cover all (not even most) possible combinations and states that the program can be in. However fake servers were modeled after the assignment of this project and using debug prints implemented in the program and external program *Wireshark* to find and fix as many bugs and errors as possible. After the program was acting according to specification it was also tested on the live server provided to students (*anton5.fit.vutbr.cz*).  
 
 <br>
 <br>
