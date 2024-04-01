@@ -298,7 +298,7 @@ void userCommandHandling(ProgramInterface* progInt)
         
         queueAddMessage(progInt->threads->sendingQueue, protocolMsg, flags, pBlocks.type);
         // signal sender if he is waiting because queue is empty
-        if(signalSender)
+        if(signalSender || pBlocks.type == msg_AUTH || pBlocks.type == cmd_AUTH)
         {
             pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
         }

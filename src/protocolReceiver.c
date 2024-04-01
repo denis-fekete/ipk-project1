@@ -237,7 +237,6 @@ void handleConfirmUDP(ProgramInterface* progInt, MessageQueue* sendingQueue, u_i
         break;
     // received confirmation of bye
     case fsm_END_W84_CONF: // BYE was send and waiting for confirm
-    case fsm_BYE_RECV:
         // change state to end the program
         setProgramState(progInt, fsm_END);
         // signal main to end
@@ -449,11 +448,12 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
                     debugPrint(stdout, "Repetetive message received\n");
                     return;
                 }
+                
+                // ping / signal sender
+                pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
+                pthread_cond_signal(progInt->threads->rec2SenderCond);
             END_VARIANTS
 
-            // ping / signal sender
-            pthread_cond_signal(progInt->threads->senderEmptyQueueCond);
-            pthread_cond_signal(progInt->threads->rec2SenderCond);
 
             printIncomingMessage(progInt, pBlocks);
             break;
