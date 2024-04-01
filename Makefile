@@ -6,7 +6,7 @@ LIB_DIR = $(SRC_DIR)/libs
 
 CC = gcc
 CVERSTION = -std=c17
-LDFLAGS := -lm -lpcap -lnet
+LDFLAGS := -lm
 
 # Default flags for debug build
 DEBUG_CFLAGS = -pthread -pedantic-errors -Wall -Wextra -Werror -g -DDEBUG
