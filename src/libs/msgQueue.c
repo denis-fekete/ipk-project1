@@ -13,7 +13,12 @@
 
 #define HIGHER_MSGID_BYTE_POSTION 2
 #define LOWER_MSGID_BYTE_POSTION 1
-#define CMD_BYTE_POSITION 0
+
+#define IS_INITIALIZED              \
+    if(queue == NULL) {             \
+        errHandling("In queueIsEmpty(), uninitialized queue was passed as argument", \
+            err_INTERNAL_BAD_ARG);  \
+    }                               \
 
 /**
  * @brief Initializes MessageQueue with default size (DEFAULT_MESSAGE_QUEUE_SIZE)
@@ -36,6 +41,8 @@ void queueInit(MessageQueue* queue)
  */
 void queueDestroy(MessageQueue* queue)
 {
+    IS_INITIALIZED;
+
     queuePopAllMessages(queue);
 
     pthread_mutex_destroy(&(queue->lock));
@@ -54,6 +61,7 @@ void queueDestroy(MessageQueue* queue)
  */
 void queueUnlock(MessageQueue* queue)
 {
+    IS_INITIALIZED;
     pthread_mutex_unlock(&(queue->lock));
 }
 
@@ -64,6 +72,7 @@ void queueUnlock(MessageQueue* queue)
  */
 void queueLock(MessageQueue* queue)
 {
+    IS_INITIALIZED;
     pthread_mutex_lock(&(queue->lock));
 }
 
@@ -79,6 +88,8 @@ void queueLock(MessageQueue* queue)
  */
 Message* queueGetMessage(MessageQueue* queue)
 {
+    IS_INITIALIZED;
+
     if(queue->len > 0 && queue->first != NULL)
     {
         return queue->first;
@@ -104,13 +115,15 @@ Message* createMessage(Buffer* buffer, msg_flags msgFlags)
 
     if(tmpMsg == NULL)
     {
-        errHandling("Malloc failed in queueAddMessage() for Message", 1); /* TODO: change err code */
+        errHandling("Malloc failed in queueAddMessage() for Message", 
+            err_MEMORY_FAIL);
     }
 
     Buffer* tmpBuffer = (Buffer*) malloc(sizeof(Buffer));
     if(tmpMsg == NULL)
     {
-        errHandling("Malloc failed in queueAddMessage() for Buffer", 1); /* TODO: change err code */
+        errHandling("Malloc failed in queueAddMessage() for Buffer", 
+            err_MEMORY_FAIL);
     }
     /* set default values to the message attributes*/
     bufferInit(tmpBuffer);
@@ -135,6 +148,8 @@ Message* createMessage(Buffer* buffer, msg_flags msgFlags)
  */
 void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags, unsigned char cmdType)
 {
+    IS_INITIALIZED;
+
     Message* newMessage = createMessage(buffer, msgFlags);
 
     // if queue doesn't have first, set this msg as first
@@ -162,6 +177,8 @@ void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags, un
  */
 void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags)
 {
+    IS_INITIALIZED;
+
     Message* newMessage = createMessage(buffer, msgFlags);
 
     // if queue doesn't have last, set this msg as last
@@ -187,20 +204,25 @@ void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgF
  */
 void queueAddMessageOnlyID(MessageQueue* queue, Buffer* buffer)
 {
+    IS_INITIALIZED;
+
     Message* tmpMsg = (Message*) malloc(sizeof(Message));
 
     if(tmpMsg == NULL)
     {
-        errHandling("Malloc failed in queueAddMessageOnlyID() for Message", 1); /* TODO: change err code */
+        errHandling("Malloc failed in queueAddMessageOnlyID() for Message", 
+            err_MEMORY_FAIL);
     }
 
     tmpMsg->buffer = NULL;
     tmpMsg->msgFlags = msg_flag_ERR;
 
+    // Only ID queue is meant for storing only ID, it does need to be atleast 
+    // 3 bytes
     if(buffer->used < 3) 
     { 
         errHandling("Buffer provided in queueAddMessageOnlyID"
-        "is shorter than 3 bytes!", 1); /*TODO: change*/ 
+        "is shorter than 3 bytes!", err_INTERNAL_BAD_ARG);
     }
     
     tmpMsg->highMsgId = buffer->data[HIGHER_MSGID_BYTE_POSTION];
@@ -232,6 +254,8 @@ void queueAddMessageOnlyID(MessageQueue* queue, Buffer* buffer)
  */
 void queuePopMessage(MessageQueue* queue)
 {
+    IS_INITIALIZED;
+
     if(queue->len <= 0)
     {
         return;
@@ -266,6 +290,8 @@ void queuePopMessage(MessageQueue* queue)
  */
 void queuePopAllMessages(MessageQueue* queue)
 {
+    IS_INITIALIZED;
+    
     while(queue->len > 0)
     {
         queuePopMessage(queue);
@@ -289,10 +315,7 @@ void queuePopAllMessages(MessageQueue* queue)
  */
 bool queueIsEmpty(MessageQueue* queue)
 {
-    if(queue == NULL) 
-    {
-        errHandling("In queueIsEmpty(), uninitialized queue was passed as argument", 1); //TODO:
-    }
+    IS_INITIALIZED;
     
     if(queue->len == 0){
         return true;
@@ -309,10 +332,7 @@ bool queueIsEmpty(MessageQueue* queue)
  */
 size_t queueLength(MessageQueue* queue)
 {
-    if(queue == NULL) 
-    {
-        errHandling("In queueIsEmpty(), uninitialized queue was passed as argument", 1); //TODO:
-    }
+    IS_INITIALIZED;
 
     size_t currValue = queue->len;
 
@@ -330,7 +350,7 @@ size_t queueLength(MessageQueue* queue)
  */
 bool queueContainsMessageId(MessageQueue* queue, Message* incoming)
 {
-    if(queue == NULL) { return false; }
+    IS_INITIALIZED;
 
     char highMsgIDByte = incoming->buffer->data[HIGHER_MSGID_BYTE_POSTION];
     char lowMsgIDByte = incoming->buffer->data[LOWER_MSGID_BYTE_POSTION];
@@ -370,6 +390,7 @@ bool queueContainsMessageId(MessageQueue* queue, Message* incoming)
  */
 void queueMessageSended(MessageQueue* queue)
 {
+    IS_INITIALIZED;
     queue->first->sendCount += 1;
 }
 
@@ -382,6 +403,7 @@ void queueMessageSended(MessageQueue* queue)
  */
 u_int8_t queueGetSendedCounter(MessageQueue* queue)
 {
+    IS_INITIALIZED;
     return queue->first->sendCount;
 }
 
@@ -399,6 +421,7 @@ u_int8_t queueGetSendedCounter(MessageQueue* queue)
  */
 void queueSetMessageID(MessageQueue* queue, ProgramInterface* progInt)
 {
+    IS_INITIALIZED;
     // check if first exists and if message is not confirm
     if(queue->first != NULL && queue->first->msgFlags != msg_flag_CONFIRM && queue->first->msgFlags != msg_flag_NOK_REPLY)
     {
@@ -418,6 +441,7 @@ void queueSetMessageID(MessageQueue* queue, ProgramInterface* progInt)
  */
 uint16_t queueGetMessageID(MessageQueue* queue)
 {
+    IS_INITIALIZED;
     if(queue->first != NULL)
     {
         return convert2BytesToU16Int(queue->first->buffer->data[LOWER_MSGID_BYTE_POSTION],
@@ -439,6 +463,7 @@ uint16_t queueGetMessageID(MessageQueue* queue)
  */
 msg_flags queueGetMessageFlags(MessageQueue* queue)
 {
+    IS_INITIALIZED;
     return queue->first->msgFlags;
 }
 
@@ -450,13 +475,13 @@ msg_flags queueGetMessageFlags(MessageQueue* queue)
  */
 void queueSetMessageFlags(MessageQueue* queue, msg_flags newFlag)
 {
+    IS_INITIALIZED;
+
     if(queue->first != NULL)
     {
         queue->first->msgFlags = newFlag;
         return;
     }
-
-    errHandling("Unexpected calling of message flags on empty MessageQueue", 1); //TODO: change
 }
 
 /**
@@ -467,7 +492,8 @@ void queueSetMessageFlags(MessageQueue* queue, msg_flags newFlag)
  */
 msg_t queueGetMessageMsgType(MessageQueue* queue)
 {
-    if(queue != NULL && queue->first != NULL)
+    IS_INITIALIZED;
+    if(queue->first != NULL)
     {
         return (enum MessageType) queue->first->type;
     }
@@ -503,4 +529,4 @@ msg_t uchar2msgType(unsigned char input)
 
 #undef HIGHER_BYTE_POSITION
 #undef LOWER_BYTE_POSITION
-#undef CMD_BYTE_POSITION
+#undef IS_INITIALIZED

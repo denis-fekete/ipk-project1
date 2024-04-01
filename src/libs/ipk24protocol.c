@@ -94,7 +94,10 @@ bool assembleProtocolUDP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         buffer->used = 3;
         return true; // message can be send to server
         break;
-    default: errHandling("Unknown command type in assembleProtocolUDP() function", 1) /*TODO: change error code*/; break;
+    default: 
+        errHandling("Unknown command type in assembleProtocolUDP() function", 
+            err_INTERNAL_BAD_ARG);
+        break;
     }
 
     // resize buffer to needed size, again because of join/msg
@@ -153,7 +156,8 @@ bool assembleProtocolUDP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         pBlocks->type = (type == cmd_MSG)? msg_MSG : msg_ERR;
         break;
     default:
-        errHandling("Unknown CommandType in assembleProtocolUDP()\n", 1); // TODO:
+        errHandling("Unknown CommandType in assembleProtocolUDP()\n", 
+            err_INTERNAL_BAD_ARG);
         break;
     }
 
@@ -212,7 +216,8 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         expectedSize += 3;
         break;
     default: 
-        errHandling("Unknown command type in assembleProtocolUDP() function", 1); /*TODO: change error code*/
+        errHandling("Unknown command type in assembleProtocolUDP() function", 
+        err_INTERNAL_BAD_ARG);
         break;
     }
     
@@ -242,7 +247,7 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
             { 
                 safePrintStderr("System: ChannelID not provided, cannot rename!"
                     "(Did you use /auth before this commands?). Use /help for help.\n");
-                return false; // TODO: check what  to do in this state
+                return false;
         }
 
         if(uchar2CommandType(pBlocks->type) == cmd_MSG)
@@ -281,7 +286,8 @@ bool assembleProtocolTCP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         pBlocks->type = msg_BYE;
         break;
     default: 
-        errHandling("Unknown command type in assembleProtocolUDP() function", 1); /*TODO: change error code*/
+        errHandling("Unknown command type in assembleProtocolUDP() function", 
+            err_INTERNAL_BAD_ARG);
         break;
     }
     // \r and \n at the od of string, also add zerobyte

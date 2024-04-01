@@ -12,12 +12,11 @@
  */
 
 #include "getopt.h" // argument processing
+#include "signal.h"
 
 #include "protocolReceiver.h"
 #include "protocolSender.h"
-// call programInterface again to define cleanup function
 #include "libs/cleanUpMaster.h"
-#include "signal.h"
 
 #ifdef DEBUG
     // global variable for printing to debug, only if DEBUG is defined
@@ -35,16 +34,56 @@ ProgramInterface* globalProgInt;
 /**
  * @brief Prints msg and exits program with errorCode
  * 
+ * Error code: <br>
+ * 1     - initialization errors
+ * 11    - network / connection to server
+ * 99       - memory allocation error
+ * 98       - internal invalid values passed to function
+ * 
  * @param msg Message to be printed
  * @param errorCode Error code that will be used as exit code
- * @return int Returns 0 (for anti-compiler errors) 
+ * @return int Returns 0
  */
 int errHandling(const char* msg, int errorCode)
 {
-    fprintf(stderr, "ERR: %s\n", msg);
+    switch (errorCode)
+    {
+    // program communication already begun, stop it and exit
+    case err_INTERNAL_UNEXPECTED_RESULT:
+    case err_INTERNAL_BAD_ARG:
+        // set program state to fsm_ERR
+        setProgramState(globalProgInt, fsm_ERR);
+        // print error message
+        fprintf(stderr, "ERR: %s\n", msg);
+        // signal main thread (stdin handling) to wake up and stop 
+        pthread_cond_signal(globalProgInt->threads->mainCond);
+        // empty whole queue
+        queueLock(globalProgInt->threads->sendingQueue);
+        queuePopAllMessages(globalProgInt->threads->sendingQueue);
+        queueUnlock(globalProgInt->threads->sendingQueue);
+        // add bye to message queue
+        sendBye(globalProgInt);
+        // wait on sender to send signal, to make sure program interface is not destroy before bye was send
+        pthread_cond_wait(globalProgInt->threads->mainCond, 
+            globalProgInt->threads->mainMutex);
+
+        // destroy program interface
+        programInterfaceDestroy(globalProgInt);
+        break;
+    // communication was not properly set, don't end it 
+    case err_MISING_PROGRAM_ARG:
+    case err_NETWORK_INIT:
+    case err_COMMUNICATION:
+    case err_MEMORY_FAIL: // cannot know if communication was already established or not
+    case err_NO_ERR:
+        fprintf(stderr, "ERR: %s\n", msg);
+        // destroy program interface
+        programInterfaceDestroy(globalProgInt);
+        break;
+    }
 
     exit(errorCode);
-    return 0;
+    return 0; // anti-compiler-error solution
 }
 
 /**
@@ -63,15 +102,14 @@ void processArguments(int argc, char* argv[], enum Protocols* prot, Buffer* ipAd
         {
         case 'h':
             printCliHelpMenu("ipk24chat-client");
-            exit(EXIT_SUCCESS);
+            errHandling("", 0);
             break;
         case 't':
             if(strcmp(optarg, "udp") == 0) { *prot = prot_UDP; }
             else if(strcmp(optarg, "tcp") == 0) { *prot = prot_TCP; }
             else
             {
-                // TODO: change err code
-                errHandling("Unknown protocol provided in -t option. Use -h for help", 1);
+                errHandling("Unknown protocol provided in -t option. Use -h for help", err_MISING_PROGRAM_ARG);
             }
             break;
         case 's': ; // compiler doesn't like size_t being after : 
@@ -92,7 +130,7 @@ void processArguments(int argc, char* argv[], enum Protocols* prot, Buffer* ipAd
             *udpRetrans = (uint8_t)atoi(optarg);
             break;
         default:
-            errHandling("Unknown option. Use -h for help", 1); //TODO: change err code
+            errHandling("Unknown option. Use -h for help", err_MISING_PROGRAM_ARG);
             break;
         }
     }
@@ -328,13 +366,11 @@ int main(int argc, char* argv[])
                     &(progInt->netConfig->udpMaxRetries));
     if(progInt->netConfig->protocol == prot_ERR)
     { 
-        errHandling("Argument protocol (-t udp / tcp) is mandatory!", 1); /*TODO:*/
-        programInterfaceDestroy(progInt);
+        errHandling("Argument protocol (-t udp / tcp) is mandatory!", err_MISING_PROGRAM_ARG);
     }
     if(ipAddress->data == NULL)
     {
-        errHandling("Server address is (-s address) is mandatory", 1); /*TODO:*/ 
-        programInterfaceDestroy(progInt);
+        errHandling("Server address is (-s address) is mandatory", err_MISING_PROGRAM_ARG); 
     }
 
     // ------------------------------------------------------------------------
@@ -357,8 +393,7 @@ int main(int argc, char* argv[])
                     progInt->netConfig->serverAddress,
                     progInt->netConfig->serverAddressSize);
         if( res != 0 ) {
-            programInterfaceDestroy(progInt);
-            errHandling("Failed to connect to the server", 1);
+            errHandling("Failed to connect to the server", err_NETWORK_INIT);
         } 
     END_VARIANTS
 
@@ -385,7 +420,8 @@ int main(int argc, char* argv[])
     pthread_join(protReceiver, NULL);
     pthread_join(protSender, NULL);
 
-    debugPrint(stdout, "DEBUG: Communicaton ended with %u messages\n", (progInt->comDetails->msgCounter - 1));
+    debugPrint(stdout, "DEBUG: Communicaton ended with %u messages\n", 
+        ((progInt->comDetails->msgCounter > 0)? 0 : progInt->comDetails->msgCounter - 1));
 
     // close socket
     shutdown(progInt->netConfig->openedSocket, SHUT_RDWR);

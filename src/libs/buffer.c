@@ -13,7 +13,6 @@
 
 #include "buffer.h"
 
-
 /**
  * @brief Sets default values to the buffer
  * 
@@ -49,8 +48,7 @@ void bufferResize(Buffer* buffer, size_t newSize)
     // Check for failed memory reallocation
     if(tmp == NULL)
     {
-        fprintf(stderr, "ERROR: Realloc failed\n");
-        exit(1); // TODO: error code change
+        errHandling("Failed to reallocate memory for buffer in bufferResize()", err_MEMORY_FAIL);
     }
     // Save new value to buffer and bufferSize
     buffer->data = tmp;
@@ -67,7 +65,7 @@ void bufferCopy(Buffer* dst, Buffer* src)
 {
     if(dst == NULL || src == NULL)
     {
-        errHandling("In bufferCopy src or dst pointers are null", 1); // TODO:
+        errHandling("In bufferCopy() src or dst pointers are null", err_INTERNAL_BAD_ARG);
     }
 
     // If dst is smaller than src, resize it

@@ -26,11 +26,14 @@ int getSocket(enum Protocols protocol)
     {
         case prot_UDP: family = SOCK_DGRAM; break; 
         case prot_TCP: family = SOCK_STREAM; break;
-        default: errHandling("Unknown protocol passed to function get socket", -1); 
+        default: errHandling("Unknown protocol passed to function get socket", err_NETWORK_INIT); 
     }
 
     int newSocket = socket(AF_INET, family, 0);
-    if(newSocket < 0) { errHandling("Socket creation failed", 1); /*TODO:*/ }
+    if(newSocket < 0)
+    { 
+        errHandling("Socket creation failed", err_NETWORK_INIT);
+    }
 
     return newSocket;
 }
@@ -48,12 +51,13 @@ int getSocket(enum Protocols protocol)
  */
 struct sockaddr_in findServer(const char* serverHostname, uint16_t serverPort)
 {
-    //TODO: getaddrinfo(), this is depricated, with freeaddrinfo
+    // this is apparently depricated however this was made based on 
+    // provided slides from lectures ...
     struct hostent* server = gethostbyname(serverHostname);
     if(server == NULL)
     {
-        fprintf(stderr, "ERROR: No such host %s\n", serverHostname);
-        exit(1); //TODO:
+        fprintf(stderr, "ERR: No such host %s\n", serverHostname);
+        errHandling("Host not found", err_NETWORK_INIT);
     }
 
     struct sockaddr_in serverAddress;

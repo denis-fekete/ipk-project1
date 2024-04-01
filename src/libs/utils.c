@@ -138,7 +138,7 @@ long findZeroInString(char* string, size_t len)
 
     if(index <= 0)
     {
-        return errHandling("Internal error in findZeroInString()", 1); // TODO: change error code
+        return errHandling("Internal error in findZeroInString(), '\0' was not found", err_INTERNAL_BAD_ARG);
     }
     else { return index; }
 }

@@ -98,7 +98,6 @@ void logicFSM(ProgramInterface* progInt)
         switch(msgType)
         {
             case msg_AUTH:
-                // TODO: look if okey with assigment
                 safePrintStderr("ERR: You are already autheticated, this message will be ignored.");
                 queuePopMessage(sendingQueue);
                 break;
@@ -111,7 +110,7 @@ void logicFSM(ProgramInterface* progInt)
         break;
     // ------------------------------------------------------------------------
     case fsm_ERR_W84_CONF:
-        case fsm_ERR:
+    case fsm_ERR:
             // sended message flags is bye
             if(flags == msg_flag_BYE)
             {
@@ -128,7 +127,8 @@ void logicFSM(ProgramInterface* progInt)
             else if(flags == msg_flag_CONFIRM) {} // if sended is confirm
             else
             {
-                errHandling("ERR: Sender send message that is not BYE in ERROR state\n", 1); //TODO:
+                errHandling("ERR: Sender send message that is not "
+                "BYE in ERROR state\n", err_INTERNAL_BAD_ARG);
             }
     default:
         break;
@@ -209,8 +209,7 @@ void* protocolSender(void* vargp)
 {
     ProgramInterface* progInt = (ProgramInterface*) vargp;
     MessageQueue* sendingQueue = progInt->threads->sendingQueue;
-    int flags = 0; //TODO: check if some usefull flags could be done
-    if(flags){} // DEBUG:
+    int flags = 0;
     
     struct timespec timeToWait; // time variable for timeout calculation
     struct timeval timeNow; // time variable for timeout calculation
@@ -298,7 +297,7 @@ void* protocolSender(void* vargp)
 
         if(bytesTx < 0)
         {
-            errHandling("Sending bytes was not successful", 1); // TODO: change error code
+            errHandling("Sending bytes was not successful", err_COMMUNICATION);
         }
 
         UDP_VARIANT

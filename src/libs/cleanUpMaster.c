@@ -29,14 +29,16 @@ void programInterfaceInit(ProgramInterface* pI)
     // ------------------------------------------------------------------------
 
     ThreadCommunication* threads = (ThreadCommunication*) malloc(sizeof(ThreadCommunication));
-    IF_NULL_ERR(threads, "Failed to allocate memory for ThreadCommunication", 1); // TODO:err code
+    IF_NULL_ERR(threads, "Failed to allocate memory for ThreadCommunication", 
+        err_MEMORY_FAIL);
 
     threads->fsmState = fsm_START;
     pI->threads = threads;
     //-------------------------------------------------------------------------
     // queue of outcoming (user sent) messages
     MessageQueue* sendingQueue = (MessageQueue*) malloc(sizeof(MessageQueue));
-    IF_NULL_ERR(sendingQueue, "Failed to allocate memory for sending MessageQueue", 1); // TODO:err code
+    IF_NULL_ERR(sendingQueue, "Failed to allocate memory for sending MessageQueue", 
+        err_MEMORY_FAIL);
     queueInit(sendingQueue); 
 
     pI->threads->sendingQueue = sendingQueue;
@@ -48,7 +50,8 @@ void programInterfaceInit(ProgramInterface* pI)
     {
        conditions[i] = (pthread_cond_t*) malloc(sizeof(pthread_cond_t));
     }
-    IF_NULL_ERR(conditions, "Failed to allocate memory for thread conditions", 1); // TODO:err code
+    IF_NULL_ERR(conditions, "Failed to allocate memory for thread conditions", 
+        err_MEMORY_FAIL);
 
     pthread_cond_init(conditions[0], NULL);
     pthread_cond_init(conditions[1], NULL);
@@ -58,7 +61,8 @@ void programInterfaceInit(ProgramInterface* pI)
     for(short i = 0; i < 5; i++)
     {
         mutexes[i] = (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
-        IF_NULL_ERR(mutexes, "Failed to allocate memory for thread mutexes", 1); // TODO:err code
+        IF_NULL_ERR(mutexes, "Failed to allocate memory for thread mutexes", 
+            err_MEMORY_FAIL);
     }
 
     pthread_mutex_init(mutexes[0], NULL);
@@ -85,7 +89,8 @@ void programInterfaceInit(ProgramInterface* pI)
     //-------------------------------------------------------------------------
 
     NetworkConfig* netConfig = (NetworkConfig*) malloc(sizeof(NetworkConfig));
-    IF_NULL_ERR(netConfig, "Failed to allocate memory for network configuration", 1); // TODO:err code
+    IF_NULL_ERR(netConfig, "Failed to allocate memory for network "
+        "configuration", err_MEMORY_FAIL);
 
     pI->netConfig = netConfig;
     
@@ -94,7 +99,8 @@ void programInterfaceInit(ProgramInterface* pI)
     //-------------------------------------------------------------------------
 
     CommunicationDetails* comDetails = (CommunicationDetails*) malloc(sizeof(CommunicationDetails));
-    IF_NULL_ERR(comDetails, "Failed to allocate memory for Communication Details", 1); // TODO:err code
+    IF_NULL_ERR(comDetails, "Failed to allocate memory for Communication "
+        "Details", err_MEMORY_FAIL);
 
     comDetails->msgCounter = 0;
     // initalize buffers
@@ -107,7 +113,7 @@ void programInterfaceInit(ProgramInterface* pI)
     // CleanUp
     //-------------------------------------------------------------------------
     CleanUp* cleanUp = (CleanUp*) malloc(sizeof(CleanUp));
-    IF_NULL_ERR(comDetails, "Failed to allocate memory for CleanUp", 1); // TODO:err code
+    IF_NULL_ERR(comDetails, "Failed to allocate memory for CleanUp", err_MEMORY_FAIL);
 
     bufferInit(&(cleanUp->clientInput));
     bufferInit(&(cleanUp->protocolToSendedByMain));
@@ -116,7 +122,8 @@ void programInterfaceInit(ProgramInterface* pI)
     bufferInit(&(cleanUp->serverResponse));
 
     MessageQueue* confirmedMessages = (MessageQueue*) malloc(sizeof(MessageQueue));
-    IF_NULL_ERR(comDetails, "Failed to allocate memory for CleanUp.MessageQueue", 1); // TODO:err code
+    IF_NULL_ERR(comDetails, "Failed to allocate memory for "
+        "CleanUp.MessageQueue", err_MEMORY_FAIL);
     queueInit(confirmedMessages);
 
     cleanUp->confirmedMessages = confirmedMessages;

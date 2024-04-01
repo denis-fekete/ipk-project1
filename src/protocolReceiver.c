@@ -83,7 +83,7 @@ void sendConfirm(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterf
 {
     if(serverResponse == NULL || receiverSendMsgs == NULL)
     {
-         errHandling("Invalid pointers passed as arguements for assembleConfirmProtocol()\n", 1); // TODO:
+         errHandling("Invalid pointers passed as arguements for assembleConfirmProtocol()\n", 1);
     }
 
     // resize receiver buffer to size 4, CONFIRM(1 Byte)|MessageID(2 Bytes)
@@ -104,7 +104,8 @@ void sendConfirm(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterf
     bool res = assembleProtocolUDP(&pBlocks, receiverSendMsgs, progInt);
     if(!res)
     {
-        errHandling("Assembling of confrim protocol failed\n", 1); // TODO:
+        errHandling("Assembling of confrim protocol failed\n", 
+            err_INTERNAL_UNEXPECTED_RESULT);
     }
 
     queueAddMessagePriority(progInt->threads->sendingQueue, receiverSendMsgs, flags);
@@ -150,7 +151,8 @@ void sendError(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterfac
 {
     if(serverResponse == NULL || receiverSendMsgs == NULL)
     {
-         errHandling("Invalid pointers passed as arguements for assembleConfirmProtocol()\n", 1); // TODO:
+         errHandling("Invalid pointers passed as arguements for "
+            "assembleConfirmProtocol()\n", err_INTERNAL_BAD_ARG);
     }
 
     size_t messageLen = strlen(message); // -1 == do not count '\0'
@@ -175,7 +177,8 @@ void sendError(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterfac
     queueLock(progInt->threads->sendingQueue);
     if(!res)
     {
-        errHandling("Assembling of error protocol failed\n", 1); // TODO:
+        errHandling("Assembling of error protocol failed\n", 
+            err_INTERNAL_UNEXPECTED_RESULT);
     }
     queueAddMessage(progInt->threads->sendingQueue, receiverSendMsgs, msg_flag_ERR, cmd_ERR);
 
@@ -216,9 +219,11 @@ void handleConfirmUDP(ProgramInterface* progInt, MessageQueue* sendingQueue, u_i
 
     pthread_cond_signal(progInt->threads->rec2SenderCond);
 
-    debugPrint(stdout, "DEBUG: Msg sended by sender was "
-        "confirmed, id: %i\n", queueTopMsgID);
-    bufferPrint(topOfQueue->buffer, 9); // DEBUG:
+    #ifdef DEBUG
+        debugPrint(stdout, "DEBUG: Msg sended by sender was "
+            "confirmed, id: %i\n", queueTopMsgID);
+        bufferPrint(topOfQueue->buffer, 9);
+    #endif
 
     switch (getProgramState(progInt))
     {
@@ -369,7 +374,7 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
         UDP_VARIANT
             handleConfirmUDP(progInt, sendingQueue, msgID);
         TCP_VARIANT
-            errHandling("Received CONFIRM message in TCP mode", 1); //TODO: err code change
+            errHandling("Received CONFIRM message in TCP mode", err_COMMUNICATION);
         END_VARIANTS
             break;
         // --------------------------------------------------------------------
@@ -405,7 +410,6 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
                         safePrintStderr("Failure: %s\n", pBlocks->msg_reply_MsgContents.start);
                         if(getProgramState(progInt) == fsm_JOIN_ATEMPT)
                         {
-                            // TODO: check if okey with assignment
                             setProgramState(progInt, fsm_OPEN);
                         }
                         else
@@ -535,7 +539,7 @@ void* protocolReceiver(void *vargp)
     MessageQueue* confirmedMsgs = progInt->cleanUp->confirmedMessages;
 
     // Await response
-    int flags = 0; // TODO: look if some flags could be used
+    int flags = 0;
     uint16_t msgID; // message id incoming
 
     // ------------------------------------------------------------------------
@@ -550,7 +554,7 @@ void* protocolReceiver(void *vargp)
     // more messages will be sent 
     if(setsockopt(progInt->netConfig->openedSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv)))
     {
-        errHandling("setsockopt() failed\n", 1); //TODO:
+        errHandling("setsockopt() failed\n", err_COMMUNICATION);
     }
 
     // ------------------------------------------------------------------------

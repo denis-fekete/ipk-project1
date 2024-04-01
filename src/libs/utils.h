@@ -60,6 +60,18 @@ typedef enum CommandType {
     cmd_CONVERSION_ERR
     } cmd_t;
 
+/**
+ * @brief Enum for error exit codes 
+ */
+typedef enum ErrorCode {
+    err_NO_ERR = 0,
+    err_MISING_PROGRAM_ARG = 1,
+    err_NETWORK_INIT = 11,
+    err_COMMUNICATION = 21,
+    err_INTERNAL_UNEXPECTED_RESULT = 97,
+    err_INTERNAL_BAD_ARG = 98,
+    err_MEMORY_FAIL = 99,
+} err_code;
 // ----------------------------------------------------------------------------
 //  Structures
 // ----------------------------------------------------------------------------
