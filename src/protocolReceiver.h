@@ -20,12 +20,11 @@
 /**
  * @brief Create err protocol
  * 
- * @param serverResponse Buffer from which will referenceID be taken
  * @param receiverSendMsgs Buffer to which should message be stored
  * @param progInt Pointer to Program Interface
  * @param message Message to be sended to the server
  */
-void sendError(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterface* progInt, const char* message);
+void sendError(Buffer* receiverSendMsgs, ProgramInterface* progInt, const char* message);
 
 /**
  * @brief Create confirm protocol

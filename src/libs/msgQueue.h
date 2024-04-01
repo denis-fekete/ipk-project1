@@ -152,18 +152,18 @@ Message* createMessage(Buffer* buffer, msg_flags msgFlags);
  * 
  * @param queue MessageQueue to which will the new message be added
  * @param buffer is and input buffer from which the new message will be created
- * @param cmdType type of command to be set to the message
+ * @param cmdType type of message to be set to the message
  */
-void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags, unsigned char cmdType);
+void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags, unsigned char msgType);
 
 /**
  * @brief Adds new message to the queue at the start
  * 
  * @param queue MessageQueue to which will the new message be added
  * @param buffer is and input buffer from which the new message will be created
+ * @param cmdType type of message to be set to the message 
  */
-void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags);
-
+void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags, unsigned char msgType);
 
 /**
  * @brief Adds message to queue at the start. Added emssage won't contain buffer, only
@@ -171,8 +171,9 @@ void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgF
  * 
  * @param queue Pointer to the queue 
  * @param buffer Buffer where message is stored
+ * @param cmdType type of message to be set to the message
  */
-void queueAddMessageOnlyID(MessageQueue* queue, Buffer* buffer);
+void queueAddMessageOnlyID(MessageQueue* queue, Buffer* buffer, unsigned char msgType);
 
 // ----------------------------------------------------------------------------
 //

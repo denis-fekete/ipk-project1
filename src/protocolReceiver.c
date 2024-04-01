@@ -92,13 +92,16 @@ void sendConfirm(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterf
     ProtocolBlocks pBlocks;
     resetProtocolBlocks(&pBlocks);
 
-    // set commands values to received message id
-    pBlocks.cmd_conf_lowMsgID.start = &(serverResponse->data[1]);
-    pBlocks.cmd_conf_lowMsgID.len = 1;
+    if(serverResponse != NULL)
+    {
+        // set commands values to received message id
+        pBlocks.cmd_conf_lowMsgID.start = &(serverResponse->data[1]);
+        pBlocks.cmd_conf_lowMsgID.len = 1;
 
-    pBlocks.cmd_conf_highMsgID.start = &(serverResponse->data[2]);
-    pBlocks.cmd_conf_highMsgID.len = 1;
-
+        pBlocks.cmd_conf_highMsgID.start = &(serverResponse->data[2]);
+        pBlocks.cmd_conf_highMsgID.len = 1;
+    }
+   
     pBlocks.type = cmd_CONF;
 
     bool res = assembleProtocolUDP(&pBlocks, receiverSendMsgs, progInt);
@@ -108,7 +111,7 @@ void sendConfirm(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterf
             err_INTERNAL_UNEXPECTED_RESULT);
     }
 
-    queueAddMessagePriority(progInt->threads->sendingQueue, receiverSendMsgs, flags);
+    queueAddMessagePriority(progInt->threads->sendingQueue, receiverSendMsgs, flags, pBlocks.type);
 }
 
 /**
@@ -134,7 +137,7 @@ void sendBye(ProgramInterface* progInt)
     // add message to the queue
     queueAddMessage(progInt->threads->sendingQueue, 
         &progInt->cleanUp->protocolToSendedByMain,
-        msg_flag_BYE, cmd_EXIT);
+        msg_flag_BYE, msg_BYE);
 
     queueUnlock(progInt->threads->sendingQueue);
 }
@@ -142,14 +145,13 @@ void sendBye(ProgramInterface* progInt)
 /**
  * @brief Create err protocol
  * 
- * @param serverResponse Buffer from which will referenceID be taken
  * @param receiverSendMsgs Buffer to which should message be stored
  * @param progInt Pointer to Program Interface
  * @param message Message to be sended to the server
  */
-void sendError(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterface* progInt, const char* message)
+void sendError(Buffer* receiverSendMsgs, ProgramInterface* progInt, const char* message)
 {
-    if(serverResponse == NULL || receiverSendMsgs == NULL)
+    if(receiverSendMsgs == NULL)
     {
          errHandling("Invalid pointers passed as arguements for "
             "assembleConfirmProtocol()\n", err_INTERNAL_BAD_ARG);
@@ -188,7 +190,7 @@ void sendError(Buffer* serverResponse, Buffer* receiverSendMsgs, ProgramInterfac
 /**
  * @brief Function to handle received UDP confirms 
  * 
- * @param progInt Global Program Interface
+ * @param progInt Program Interface pointer
  * @param msgID ID received message ID
  * @param sendingQueue Pointer to the MessageQueue that will be sended by sender
  */
@@ -204,11 +206,12 @@ void handleConfirmUDP(ProgramInterface* progInt, MessageQueue* sendingQueue, u_i
     uint16_t queueTopMsgID = queueGetMessageID(sendingQueue);
     
     // if first in queue is same as incoming confirm, confirm message
-    // if(msgID != queueTopMsgID || topOfQueue->sendCount == 0)
-    if(msgID != queueTopMsgID)
+    if(msgID != queueTopMsgID && topOfQueue->type != msg_AUTH)
     { 
         queueUnlock(sendingQueue);
+        debugPrintSeparator(stdout);
         debugPrint(stdout, "DEBUG: Not correct message ID\n");
+        debugPrintSeparator(stdout);
         return;
     }
 
@@ -217,7 +220,6 @@ void handleConfirmUDP(ProgramInterface* progInt, MessageQueue* sendingQueue, u_i
     // increase global counter message counter
     progInt->comDetails->msgCounter = msgID + 1;
 
-    pthread_cond_signal(progInt->threads->rec2SenderCond);
 
     #ifdef DEBUG
         debugPrint(stdout, "DEBUG: Msg sended by sender was "
@@ -234,9 +236,12 @@ void handleConfirmUDP(ProgramInterface* progInt, MessageQueue* sendingQueue, u_i
         setProgramState(progInt, fsm_W84_REPLY);
         break;
     // received confirmation of bye
+    case fsm_END_W84_CONF: // BYE was send and waiting for confirm
     case fsm_BYE_RECV:
         // change state to end the program
         setProgramState(progInt, fsm_END);
+        // signal main to end
+        pthread_cond_signal(progInt->threads->mainCond);
         break;
     case fsm_OPEN: // signal main that next message can be processed
         // client send message and is waiting for confirm
@@ -246,6 +251,7 @@ void handleConfirmUDP(ProgramInterface* progInt, MessageQueue* sendingQueue, u_i
         break;
     }
         
+    pthread_cond_signal(progInt->threads->rec2SenderCond);
     queueUnlock(sendingQueue);
     return;
 }
@@ -349,12 +355,14 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
         queueLock(confirmedMsgs);
         queueLock(sendingQueue);
 
-        Message* incomingMessage = queueGetMessage(sendingQueue);
+        Message incomingMessage;
+        incomingMessage.buffer = serverResponse;
+        incomingMessage.type = pBlocks->type;
 
         // if message id queue contains received message add it to it and prerform action
-        if(!queueContainsMessageId(confirmedMsgs, incomingMessage))
+        if(!queueContainsMessageId(confirmedMsgs, &incomingMessage))
         {
-            queueAddMessageOnlyID(confirmedMsgs, serverResponse);
+            queueAddMessageOnlyID(confirmedMsgs, serverResponse, pBlocks->type);
         }
         else // message was already received once, do nothing
         {
@@ -503,7 +511,7 @@ void receiverFSM(ProgramInterface* progInt, uint16_t msgID, ProtocolBlocks* pBlo
             UDP_VARIANT
                 sendConfirm(serverResponse, receiverSendMsgs, progInt, msg_flag_CONFIRM);
             END_VARIANTS
-            sendError(serverResponse, receiverSendMsgs, progInt, "Unknown message format");
+            sendError(receiverSendMsgs, progInt, "Unknown message format");
             sendBye(progInt);
 
             // singal other threads to wake up if suspended

@@ -45,12 +45,14 @@ void logicFSM(ProgramInterface* progInt)
     case fsm_AUTH_W82_BE_SENDED: /*authentication is waiting(W8) to(2) be sended*/
     case fsm_AUTH_SENDED: /*authetication was successfully sended*/
     case fsm_W84_REPLY: /*auth has been confirmed, waiting for reply*/
-
         // if authentication is wating to be sended, switch state to sended
-        if(flags == msg_flag_AUTH)
+        if( flags == msg_flag_AUTH &&
+            getProgramState(progInt) <= fsm_AUTH_W82_BE_SENDED )
         {
+            // this could have been through fallthrough however compiler keeps complaining
             setProgramState(progInt, fsm_AUTH_SENDED);
         }
+
         // if program is not in open state and message to be send is not auth 
         if(msgType != msg_AUTH && flags != msg_flag_NOK_REPLY)
         {
@@ -77,9 +79,9 @@ void logicFSM(ProgramInterface* progInt)
             // message was confirmed, wait for receiver to ping me   
             pthread_cond_wait(progInt->threads->rec2SenderCond, 
                 progInt->threads->rec2SenderMutex);
+            queueLock(sendingQueue);
             // call filter again
             logicFSM(progInt);
-            queueLock(sendingQueue);
         }
         break;
     // ------------------------------------------------------------------------
@@ -114,9 +116,14 @@ void logicFSM(ProgramInterface* progInt)
             // sended message flags is bye
             if(flags == msg_flag_BYE)
             {
-                // end set state to end
-                setProgramState(progInt, fsm_END);
-                pthread_cond_signal(progInt->threads->mainCond);
+                UDP_VARIANT
+                    // in UDP you must wait for confirmation of BYE
+                    setProgramState(progInt, fsm_END_W84_CONF);
+                TCP_VARIANT
+                    // end set state to end
+                    setProgramState(progInt, fsm_END);
+                    pthread_cond_signal(progInt->threads->mainCond);
+                END_VARIANTS
             }
             else if(flags == msg_flag_ERR)
             {
@@ -143,34 +150,49 @@ void logicFSM(ProgramInterface* progInt)
  * @param sendingQueue Pointer to queue from which should messages be filtered 
  * @param progInt Pointer to ProgramInterface
  */
-void filterResentMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
+bool filterResentMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
 {
+    bool resetLoop = false;
     Message* msgToBeSend = queueGetMessage(sendingQueue);
     while(msgToBeSend != NULL)
     {
         // if message was send more than maximum udp retries
         if( queueGetSendedCounter(sendingQueue) > progInt->netConfig->udpMaxRetries )
         {
-            // print error message
-            safePrintStderr("ERR: Request timed out.\n");
-            // clear message queue
-            queuePopAllMessages(sendingQueue);
-            // set program into error state
-            setProgramState(progInt, fsm_ERR);
+            // if timedout message is ERR pop it and try to send BYE atleast
+            if(getProgramState(progInt) == fsm_ERR_W84_CONF) { }
+            
+            // if timedout message is BYE set program to END and exit, 
+            // confirmation wont come ...
+            else if(getProgramState(progInt) == fsm_END_W84_CONF) 
+            { 
+                setProgramState(progInt, fsm_END);
+                // signal main to end
+                pthread_cond_signal(progInt->threads->mainCond);
+                resetLoop = true; // reset loop to not get stuck
+            }
+            else
+            {
+                // print error message
+                safePrintStderr("ERR: Request timed out.\n");
+                // clear message queue
+                queuePopAllMessages(sendingQueue);
+                // set program into error state
+                setProgramState(progInt, fsm_ERR);
 
-            queueUnlock(sendingQueue);
-            // add error message to queue
-            sendError(msgToBeSend->buffer, 
-                &(progInt->cleanUp->protocolToSendedByReceiver), 
-                progInt, "Request timed out");
-            // add bye message to queue
-            sendBye(progInt);
+                queueUnlock(sendingQueue);
+                // add error message to queue
+                sendError(&(progInt->cleanUp->protocolToSendedBySender), 
+                    progInt, "Request timed out");
+                // add bye message to queue
+                sendBye(progInt);
 
-            // signal main to end
-            pthread_cond_signal(progInt->threads->mainCond);
+                // signal main to end
+                pthread_cond_signal(progInt->threads->mainCond);
 
-            queueLock(sendingQueue);
-            break;
+                queueLock(sendingQueue);
+                break;
+            }
         }
         else if(msgToBeSend->msgFlags == msg_flag_REJECTED)
         {
@@ -197,6 +219,8 @@ void filterResentMessages(MessageQueue* sendingQueue, ProgramInterface* progInt)
         // get new one message
         msgToBeSend = queueGetMessage(sendingQueue);
     }
+
+    return resetLoop;
 }
 
 /**
@@ -222,7 +246,10 @@ void* protocolSender(void* vargp)
         UDP_VARIANT
             queueLock(sendingQueue);
 
-            filterResentMessages(sendingQueue, progInt);
+            // if BYE was not confirmed and popped, it changed program state 
+            // to END, to prevent being stuck resetLopp is set
+            bool resetLoop = filterResentMessages(sendingQueue, progInt);
+            if(resetLoop) { continue; }
         TCP_VARIANT
         END_VARIANTS
 

@@ -39,6 +39,7 @@ typedef enum FSM {
     fsm_ERR, 
     fsm_ERR_W84_CONF,
     fsm_SIGINT_BYE, /*turn off all threads except sender*/
+    fsm_END_W84_CONF, /*end sended, wait for its confirmation*/
     fsm_END,
     } fsm_t;
 

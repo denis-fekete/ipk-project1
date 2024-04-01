@@ -87,11 +87,13 @@ bool assembleProtocolUDP(ProtocolBlocks* pBlocks, Buffer* buffer, ProgramInterfa
         buffer->data[1] = pBlocks->cmd_conf_lowMsgID.start[0];
         buffer->data[2] = pBlocks->cmd_conf_highMsgID.start[0];
         buffer->used = 3;
+        pBlocks->type = msg_CONF;
         return true; // message can be send to server
         break;
     case cmd_EXIT: 
         buffer->data[0] = (unsigned char) msg_BYE;
         buffer->used = 3;
+        pBlocks->type = msg_BYE;
         return true; // message can be send to server
         break;
     default: 
@@ -319,7 +321,7 @@ void disassebleProtocolUDP(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* ms
     size_t index; // Temporaty helping variable to hold index in string
 
     // Get msg type
-    pBlocks->type = (unsigned char) buffer->data[0];
+    pBlocks->type = uchar2msgType((unsigned char) buffer->data[0] );
     
     *msgId = convert2BytesToU16Int(buffer->data[1], buffer->data[2]);
     
@@ -350,28 +352,26 @@ void disassebleProtocolUDP(Buffer* buffer, ProtocolBlocks* pBlocks, uint16_t* ms
         index = findZeroInString(pBlocks->msg_reply_MsgContents.start, buffer->used - 
                 (TYPE_ID_LEN + pBlocks->msg_reply_result.len + pBlocks->msg_reply_refMsgID.len));
         pBlocks->msg_reply_MsgContents.len = index;
+        pBlocks->type = msg_REPLY;
         break;
     // ------------------------------------------------------------------------
     case msg_AUTH:
         // Auth: Username (x bytes)
-        debugPrint(stdout, "a\n");
         index = findZeroInString(pBlocks->msg_auth_username.start, buffer->used - (TYPE_ID_LEN));
         pBlocks->msg_auth_username.len = index;
 
-        debugPrint(stdout, "b\n");
         // Auth: Secret (x bytes)
         pBlocks->msg_auth_displayname.start = BBLOCK_END_W_ZERO_BYTE(pBlocks->msg_auth_username); // skip one zero byte
         index = findZeroInString(pBlocks->msg_auth_displayname.start, buffer->used 
                 - (TYPE_ID_LEN + pBlocks->msg_auth_username.len));
         pBlocks->msg_auth_displayname.len = index;
 
-        debugPrint(stdout, "c\n");
         // Auth: DisplayName (x bytes)
         pBlocks->msg_auth_secret.start = BBLOCK_END_W_ZERO_BYTE(pBlocks->msg_auth_displayname); // skip one zero byte
         index = findZeroInString(pBlocks->msg_auth_secret.start, buffer->used 
             - (TYPE_ID_LEN + pBlocks->msg_auth_username.len + pBlocks->msg_auth_displayname.len));
         pBlocks->msg_auth_secret.len = index;
-        debugPrint(stdout, "d\n");
+        pBlocks->type = msg_AUTH;
         break;
     // ------------------------------------------------------------------------
     case msg_MSG:

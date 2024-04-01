@@ -34,12 +34,6 @@ ProgramInterface* globalProgInt;
 /**
  * @brief Prints msg and exits program with errorCode
  * 
- * Error code: <br>
- * 1     - initialization errors
- * 11    - network / connection to server
- * 99       - memory allocation error
- * 98       - internal invalid values passed to function
- * 
  * @param msg Message to be printed
  * @param errorCode Error code that will be used as exit code
  * @return int Returns 0

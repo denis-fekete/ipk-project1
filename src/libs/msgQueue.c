@@ -144,9 +144,9 @@ Message* createMessage(Buffer* buffer, msg_flags msgFlags)
  * 
  * @param queue MessageQueue to which will the new message be added
  * @param buffer is and input buffer from which the new message will be created
- * @param cmdType type of command to be set to the message
+ * @param cmdType type of message to be set to the message
  */
-void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags, unsigned char cmdType)
+void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags, unsigned char msgType)
 {
     IS_INITIALIZED;
 
@@ -164,7 +164,7 @@ void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags, un
     queue->last->behindMe = NULL;
 
     // set message type if TCP, if UDP this will be overwritten
-    newMessage->type = cmdType;
+    newMessage->type = msgType;
     // increase queue size
     queue->len += 1;
 }
@@ -174,13 +174,14 @@ void queueAddMessage(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags, un
  * 
  * @param queue MessageQueue to which will the new message be added
  * @param buffer is and input buffer from which the new message will be created
+ * @param cmdType type of message to be set to the message 
  */
-void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags)
+void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgFlags, unsigned char msgType)
 {
     IS_INITIALIZED;
 
     Message* newMessage = createMessage(buffer, msgFlags);
-
+    newMessage->type = msgType;
     // if queue doesn't have last, set this msg as last
     if(queue->last == NULL) { queue->last = newMessage; }
 
@@ -201,8 +202,9 @@ void queueAddMessagePriority(MessageQueue* queue, Buffer* buffer, msg_flags msgF
  * 
  * @param queue Pointer to the queue 
  * @param buffer Buffer where message is stored
+ * @param cmdType type of message to be set to the message
  */
-void queueAddMessageOnlyID(MessageQueue* queue, Buffer* buffer)
+void queueAddMessageOnlyID(MessageQueue* queue, Buffer* buffer, unsigned char msgType)
 {
     IS_INITIALIZED;
 
@@ -216,6 +218,7 @@ void queueAddMessageOnlyID(MessageQueue* queue, Buffer* buffer)
 
     tmpMsg->buffer = NULL;
     tmpMsg->msgFlags = msg_flag_ERR;
+    tmpMsg->type = msgType;
 
     // Only ID queue is meant for storing only ID, it does need to be atleast 
     // 3 bytes
@@ -364,10 +367,7 @@ bool queueContainsMessageId(MessageQueue* queue, Message* incoming)
             {
                 if(incoming->type == topOfQueue->type)
                 {
-                    if(incoming->msgFlags == topOfQueue->msgFlags)
-                    {
-                        return true; 
-                    }
+                    return true; 
                 }
             }
         }
@@ -423,13 +423,16 @@ void queueSetMessageID(MessageQueue* queue, ProgramInterface* progInt)
 {
     IS_INITIALIZED;
     // check if first exists and if message is not confirm
-    if(queue->first != NULL && queue->first->msgFlags != msg_flag_CONFIRM && queue->first->msgFlags != msg_flag_NOK_REPLY)
+    if(queue->first != NULL )
     {
-        // break msgCounter into bytes and store it into buffer at positions
-        breakU16IntToBytes(
-            &(queue->first->buffer->data[HIGHER_MSGID_BYTE_POSTION]),
-            &(queue->first->buffer->data[LOWER_MSGID_BYTE_POSTION]),
-            progInt->comDetails->msgCounter);
+        if(queue->first->msgFlags != msg_flag_CONFIRM && queue->first->msgFlags != msg_flag_NOK_REPLY)
+        {
+            // break msgCounter into bytes and store it into buffer at positions
+            breakU16IntToBytes(
+                &(queue->first->buffer->data[HIGHER_MSGID_BYTE_POSTION]),
+                &(queue->first->buffer->data[LOWER_MSGID_BYTE_POSTION]),
+                progInt->comDetails->msgCounter);
+        }
     }
 }
 
@@ -495,7 +498,8 @@ msg_t queueGetMessageMsgType(MessageQueue* queue)
     IS_INITIALIZED;
     if(queue->first != NULL)
     {
-        return (enum MessageType) queue->first->type;
+        
+        return uchar2msgType( queue->first->type );
     }
 
     return msg_UNKNOWN;
