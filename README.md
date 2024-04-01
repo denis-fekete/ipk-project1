@@ -2,6 +2,9 @@
 **Author:**
 Denis Fekete ([xfeket01@vutbr.cz](mailto:xfeket01@vutbr.cz))
 
+**Git repository:**
+https://git.fit.vutbr.cz/xfeket01/ipk-project1.git
+
 ## Description
 IPK24CHAT-client is a command-line application for communicating with the server that is using the same (IPK24CHAT) protocol. Protocol is based on UDP or TCP protocol which can be changed with program arguments when the program is being started.
 
