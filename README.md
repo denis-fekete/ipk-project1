@@ -1,3 +1,72 @@
+# IPK24CHAT-Client
+
+## Description
+IPK24CHAT-client is a command-line application for communicating with the server that is using the same (IPK24CHAT) protocol. Protocol is based on UDP or TCP protocol which can be changed with program arguments when the program is being started.
+
+The program is written in C programming language and has three **threads** (not processes) that are running simultaneously. These threads communicate using **ProgramInterface** Synchronization of threads is done with **mutexes** that make sure that important data structures are protected from being accessed by more than one thread at a time. Protected parts of the program are **MessageQueue**, program state (Fininite State Machine) and standard output. Mutexes can also be used to ensure a certain order of actions (especially in the UDP variant).
+
+### Program Interface
+The ProgramInterface is a structure holding information about the whole program and all dynamically allocated memory. This allows the program to correctly react to *SIGINT* signals that can be sent by the operating system. ProgramInterface is part of parameters for the most functions in the program, however, some functions that cannot have parameters use the global variable defined in `main.c` which is a pointer to the main ProgramInterface variable.
+
+### MessageQueue
+The MessageQueue is a (custom) library contenting priority FIFO (first in first out) queue structure and functions needed to work with this structure. This structure contains a mutex that allows only one caller to work with the queue at a time. This mutex was part of the functions however due to some limitations it was placed outside of the function and the programmer has to work with this mutex correctly. MessageQueue is used for messages to be sent or that were received (for controlling duplicate messages in the UDP variant). Priority FIFO queue means that queue is always working with the oldest added message, however, some functions can bend behavior.
+
+## Threads and asynchronous communication 
+As mentioned before three threads are used in this program, from now on call them **modules**. This is needed to ensure that user input, sending of messages and receiving can be done at the same time, and also ensure that modules are suspended and not taking CPU resources when they have nothing to do. This however has some disadvantages and the program has become inflated, therefore it is not as easily readable it also doesn't allow for one single *"central"* FSM to exist in the program and each module has to have its implementation of FSM (function that controls flow of the program ... switch or if statements).
+
+### Main module/thread
+The main module has to initialize ProgramInterace, open the socket and establish network communication. After these steps, the main initializes the **receiver** and **sender** modules. From this point main module's purpose is to take user inputs, convert them to the correct format and add them to the global MessageQueue. After the message is added to the MessageQueue main will be suspended until other modules signal it to work again, allowing the user to perform actions. If the program state changes one of the ending states for main (`fsm_ERR`, `fsm_ERR_W84_CONF`, `fsm_SIGINT_BYE`, `fsm_END_W84_CONF` or `fsm_END`) it stops loading user input from the standard input stream (stdin) and starts waiting for other module to stop. After all other modules stop working ProgramInterface will be destroyed and the program exits.
+
+### Receiver module/thread
+The receiver module's job is to receive all messages from the server and change the program state accordingly. After receiving the message from the server it is broken down into commands and based on detected commands action is performed.
+
+### Sender module/thread
+The sender module's job is to send all messages from the MessageQueue to the server. In the case of UDP communication, it also handles the correct retransmission of messages alternatively if the message is retransmitted too many times *error* message will be sent to the server and communication will be ended. In UDP all messages must be confirmed, otherwise sender will try to resent them. If the *error* or *bye* message timeout sender will continue as if they were sent and will try to correctly end the program.
+
+## Finite State Machine
+
+### Short explanation
+The program starts in the `Start` state and any messages except for `/auth` will lead to an internal error being printed on standard output. After `/auth` has been sent, confirmed, replied to and confirmation of reply was sent the program is set into the `Open` state. From this state user can perform all valid commands. From the `Open` state based on the other modules or user input the program will always end in the `End` state where it will exit.
+
+### UDP
+![UDP Finite State Machine](docs/ipk_fsm_udp.drawio.svg)
+### TCP
+![TCP Finite State Machine](docs/ipk_fsm_tcp.drawio.svg)
+
+
+### Legend:
+ - `|` -> logical or (example msg1 | msg2 == in case msg1 or msg2)
+ - `actor:` -> actors that performed action, possible actors stdin, sender, receiver, program
+ - `*` -> all other messages that are not explicitly typed
+ - `/command` -> command that was used, for list of accepted commands see section commands
+ - `"action"` -> description of the action that took place, that cannot be descripted any other way 
+
+### Notes for UDP:
+ - between the transition from `Error waiting for confirmation` and `End sent, waiting for confirmation` sender sends the *bye* message
+ - in the `Open` state the transition `stdin: *`:
+    * can trigger internal error printing, however, these prints are just for user and are not sent
+    * messages sent must be confirmed by the receiver, if they are not confirmed after a certain time they are retransmitted again 
+
+
+## Commands
+The client can perform actions based on the provided commands. List of commands:
+- `/auth {username} {secret} {displayname}`-> autheticates user to the server and sets displayname
+- `/join {channelID}` -> changes the channel that the client is connected to
+- `/help` -> prints help menu
+- `/rename {displayname}` -> changes user displayname
+- `/exit` -> exits program
+
+<br>
+<br>
+
+# Disclaimer
+After this point is programmer documentation generated using Doxygen that was written by the author of this project. Documentation was converted to Markdown format using the tool `esp-doxybook`. Author of this application (IPK24CHAT-Client) is not the author of the tool used for converting Doxygen documentation into Markdown format, all credits and rights belong to: uhanxi@espressif.com (https://pypi.org/project/esp-doxybook/, https://github.com/espressif/doxybook).
+
+---
+<br>
+<br>
+
+
 # API Reference
 
 ## Header files
@@ -282,9 +351,10 @@ Copyright (c) 2024
 | ---: | :--- |
 |  bool | [**assembleProtocolTCP**](#function-assembleprotocoltcp) ([**ProtocolBlocks**](#struct-protocolblocks) \*pBlocks, [**Buffer**](#struct-buffer) \*buffer, [**ProgramInterface**](#struct-programinterface) \*progInt) <br>_Assembles protocol from commands and command type into a buffer in TCP format._ |
 |  bool | [**assembleProtocolUDP**](#function-assembleprotocoludp) ([**ProtocolBlocks**](#struct-protocolblocks) \*pBlocks, [**Buffer**](#struct-buffer) \*buffer, [**ProgramInterface**](#struct-programinterface) \*progInt) <br>_Assembles protocol from commands and command type into a buffer in UDP format._ |
-|  bool | [**disassebleProtocolTCP**](#function-disassebleprotocoltcp) ([**Buffer**](#struct-buffer) \*buffer, [**ProtocolBlocks**](#struct-protocolblocks) \*pBlocks) <br>_Dissassembles protocol from_ [_**Buffer**_](#struct-buffer)_ into commands, msgType and msgId for TCP variant._ |
-|  bool | [**disassebleProtocolUDP**](#function-disassebleprotocoludp) ([**Buffer**](#struct-buffer) \*buffer, [**ProtocolBlocks**](#struct-protocolblocks) \*pBlocks, uint16\_t \*msgId) <br>_Dissassembles protocol from_ [_**Buffer**_](#struct-buffer)_ into commands, msgType and msgId for UDP variant._ |
-|  bool | [**userInputToCmds**](#function-userinputtocmds) ([**Buffer**](#struct-buffer) \*buffer, [**ProtocolBlocks**](#struct-protocolblocks) \*pBlocks, bool \*eofDetected, [**msg\_flags**](#typedef-msg_flags) \*flags) <br>_Takes input from user (client) from buffer and break it into an array of commands (ByteBlock)_ |
+|  void | [**disassebleProtocolTCP**](#function-disassebleprotocoltcp) ([**Buffer**](#struct-buffer) \*buffer, [**ProtocolBlocks**](#struct-protocolblocks) \*pBlocks) <br>_Dissassembles protocol from_ [_**Buffer**_](#struct-buffer)_ into commands, msgType and msgId for TCP variant._ |
+|  void | [**disassebleProtocolUDP**](#function-disassebleprotocoludp) ([**Buffer**](#struct-buffer) \*buffer, [**ProtocolBlocks**](#struct-protocolblocks) \*pBlocks, uint16\_t \*msgId) <br>_Dissassembles protocol from_ [_**Buffer**_](#struct-buffer)_ into commands, msgType and msgId for UDP variant._ |
+|  void | [**resetProtocolBlocks**](#function-resetprotocolblocks) ([**ProtocolBlocks**](#struct-protocolblocks) \*pBlocks) <br>_Sets default values to the ProtocolBlock variable._ |
+|  int | [**userInputToCmds**](#function-userinputtocmds) ([**Buffer**](#struct-buffer) \*buffer, [**ProtocolBlocks**](#struct-protocolblocks) \*pBlocks, [**msg\_flags**](#typedef-msg_flags) \*flags) <br>_Takes input from user (client) from buffer and break it into an array of commands (ByteBlock)_ |
 
 
 ## Structures and Types Documentation
@@ -438,7 +508,7 @@ Returns true if buffer can be sended to the server
 
 _Dissassembles protocol from_ [_**Buffer**_](#struct-buffer)_ into commands, msgType and msgId for TCP variant._
 ```c
-bool disassebleProtocolTCP (
+void disassebleProtocolTCP (
     Buffer *buffer,
     ProtocolBlocks *pBlocks
 ) 
@@ -455,7 +525,7 @@ bool disassebleProtocolTCP (
 
 _Dissassembles protocol from_ [_**Buffer**_](#struct-buffer)_ into commands, msgType and msgId for UDP variant._
 ```c
-bool disassebleProtocolUDP (
+void disassebleProtocolUDP (
     Buffer *buffer,
     ProtocolBlocks *pBlocks,
     uint16_t *msgId
@@ -469,14 +539,27 @@ bool disassebleProtocolUDP (
 * `buffer` Input buffer containing message 
 * `pBlocks` Separated commands and values from user input 
 * `msgId` Detected message ID
+### function `resetProtocolBlocks`
+
+_Sets default values to the ProtocolBlock variable._
+```c
+void resetProtocolBlocks (
+    ProtocolBlocks *pBlocks
+) 
+```
+
+
+**Parameters:**
+
+
+* `pBlocks` Pointer to the Protocol Blocks that should be resetted
 ### function `userInputToCmds`
 
 _Takes input from user (client) from buffer and break it into an array of commands (ByteBlock)_
 ```c
-bool userInputToCmds (
+int userInputToCmds (
     Buffer *buffer,
     ProtocolBlocks *pBlocks,
-    bool *eofDetected,
     msg_flags *flags
 ) 
 ```
@@ -493,7 +576,26 @@ Commands contain only pointers to the buffer, rewriting buffer will lead to unex
 
 * `buffer` Input buffer containing command from user (client) 
 * `commands` Array of commands where separated commands will be store 
-* `eofDetected` Signals that end of file was detected 
+* `flags` Flags that will be set to message 
+
+
+**Returns:**
+
+int Returns whenever parameters are valid. On bad argument returns -1
+
+
+
+**Warning:**
+
+Commands contain only pointers to the buffer, rewriting buffer will lead to unexpected behavior commands in commands
+
+
+
+**Parameters:**
+
+
+* `buffer` Input buffer containing command from user (client) 
+* `commands` Array of commands where separated commands will be store 
 * `flags` Flags that will be set to message 
 
 
@@ -535,10 +637,10 @@ Copyright (c) 2024
 | Type | Name |
 | ---: | :--- |
 |  [**Message**](#struct-message) \* | [**createMessage**](#function-createmessage) ([**Buffer**](#struct-buffer) \*buffer, [**msg\_flags**](#typedef-msg_flags) msgFlags) <br>_Creates and initializes message and returns pointer to it._ |
-|  void | [**queueAddMessage**](#function-queueaddmessage) ([**MessageQueue**](#struct-messagequeue) \*queue, [**Buffer**](#struct-buffer) \*buffer, [**msg\_flags**](#typedef-msg_flags) msgFlags, unsigned char cmdType) <br>_Adds new message to the queue at the end._ |
-|  void | [**queueAddMessageOnlyID**](#function-queueaddmessageonlyid) ([**MessageQueue**](#struct-messagequeue) \*queue, [**Buffer**](#struct-buffer) \*buffer) <br>_Adds message to queue at the start. Added emssage won't contain buffer, only message ID._ |
-|  void | [**queueAddMessagePriority**](#function-queueaddmessagepriority) ([**MessageQueue**](#struct-messagequeue) \*queue, [**Buffer**](#struct-buffer) \*buffer, [**msg\_flags**](#typedef-msg_flags) msgFlags) <br>_Adds new message to the queue at the start._ |
-|  bool | [**queueContainsMessageId**](#function-queuecontainsmessageid) ([**MessageQueue**](#struct-messagequeue) \*queue, char highB, char lowB) <br>_Looks for message ID in queue, works only with message queues without buffers containing only msg ids._ |
+|  void | [**queueAddMessage**](#function-queueaddmessage) ([**MessageQueue**](#struct-messagequeue) \*queue, [**Buffer**](#struct-buffer) \*buffer, [**msg\_flags**](#typedef-msg_flags) msgFlags, unsigned char msgType) <br>_Adds new message to the queue at the end._ |
+|  void | [**queueAddMessageOnlyID**](#function-queueaddmessageonlyid) ([**MessageQueue**](#struct-messagequeue) \*queue, [**Buffer**](#struct-buffer) \*buffer, unsigned char msgType) <br>_Adds message to queue at the start. Added emssage won't contain buffer, only message ID._ |
+|  void | [**queueAddMessagePriority**](#function-queueaddmessagepriority) ([**MessageQueue**](#struct-messagequeue) \*queue, [**Buffer**](#struct-buffer) \*buffer, [**msg\_flags**](#typedef-msg_flags) msgFlags, unsigned char msgType) <br>_Adds new message to the queue at the start._ |
+|  bool | [**queueContainsMessageId**](#function-queuecontainsmessageid) ([**MessageQueue**](#struct-messagequeue) \*queue, [**Message**](#struct-message) \*incoming) <br>_Looks for message ID in queue, works only with message queues without buffers containing only msg ids._ |
 |  void | [**queueDestroy**](#function-queuedestroy) ([**MessageQueue**](#struct-messagequeue) \*queue) <br>_Destroys_ [_**MessageQueue**_](#struct-messagequeue)_._ |
 |  [**Message**](#struct-message) \* | [**queueGetMessage**](#function-queuegetmessage) ([**MessageQueue**](#struct-messagequeue) \*queue) <br>_Return pointer to the first message._ |
 |  [**msg\_flags**](#typedef-msg_flags) | [**queueGetMessageFlags**](#function-queuegetmessageflags) ([**MessageQueue**](#struct-messagequeue) \*queue) <br>_Returns value of first message flags._ |
@@ -605,7 +707,8 @@ enum MessageFlags {
     msg_flag_REJECTED,
     msg_flag_CONFIRMED,
     msg_flag_ERR,
-    msg_flag_CONFIRM
+    msg_flag_CONFIRM,
+    msg_flag_BYE
 };
 ```
 
@@ -642,7 +745,8 @@ enum MessageType {
     msg_MSG = 0x04,
     msg_ERR = 0xFE,
     msg_BYE = 0xFF,
-    msg_UNKNOWN = 0xAA
+    msg_UNKNOWN = 0xAA,
+    msg_CORRUPTED = 0xAB
 };
 ```
 
@@ -698,7 +802,7 @@ void queueAddMessage (
     MessageQueue *queue,
     Buffer *buffer,
     msg_flags msgFlags,
-    unsigned char cmdType
+    unsigned char msgType
 ) 
 ```
 
@@ -708,14 +812,15 @@ void queueAddMessage (
 
 * `queue` [**MessageQueue**](#struct-messagequeue) to which will the new message be added
 * `buffer` is and input buffer from which the new message will be created 
-* `cmdType` type of command to be set to the message
+* `cmdType` type of message to be set to the message
 ### function `queueAddMessageOnlyID`
 
 _Adds message to queue at the start. Added emssage won't contain buffer, only message ID._
 ```c
 void queueAddMessageOnlyID (
     MessageQueue *queue,
-    Buffer *buffer
+    Buffer *buffer,
+    unsigned char msgType
 ) 
 ```
 
@@ -725,6 +830,7 @@ void queueAddMessageOnlyID (
 
 * `queue` Pointer to the queue 
 * `buffer` [**Buffer**](#struct-buffer) where message is stored
+* `cmdType` type of message to be set to the message
 ### function `queueAddMessagePriority`
 
 _Adds new message to the queue at the start._
@@ -732,7 +838,8 @@ _Adds new message to the queue at the start._
 void queueAddMessagePriority (
     MessageQueue *queue,
     Buffer *buffer,
-    msg_flags msgFlags
+    msg_flags msgFlags,
+    unsigned char msgType
 ) 
 ```
 
@@ -741,15 +848,15 @@ void queueAddMessagePriority (
 
 
 * `queue` [**MessageQueue**](#struct-messagequeue) to which will the new message be added
-* `buffer` is and input buffer from which the new message will be created
+* `buffer` is and input buffer from which the new message will be created 
+* `cmdType` type of message to be set to the message
 ### function `queueContainsMessageId`
 
 _Looks for message ID in queue, works only with message queues without buffers containing only msg ids._
 ```c
 bool queueContainsMessageId (
     MessageQueue *queue,
-    char highB,
-    char lowB
+    Message *incoming
 ) 
 ```
 
@@ -758,8 +865,7 @@ bool queueContainsMessageId (
 
 
 * `queue` Pointer to the queue 
-* `highB` Higer byte to compare to 
-* `lowB` Lower byte to compare to 
+* `incoming` Incoming message pointer 
 
 
 **Returns:**
@@ -1277,6 +1383,8 @@ Variables:
 
 -  [**Buffer**](#struct-buffer) protocolToSendedByReceiver  
 
+-  [**Buffer**](#struct-buffer) protocolToSendedBySender  
+
 -  [**Buffer**](#struct-buffer) serverResponse  
 
 ### typedef `CleanUp`
@@ -1436,8 +1544,10 @@ Copyright (c) 2024
 | struct | [**BytesBlock**](#struct-bytesblock) <br>_Points at the start of the bytes block (array) with len length._ |
 | typedef struct [**BytesBlock**](#struct-bytesblock) | [**BytesBlock**](#typedef-bytesblock)  <br>_Points at the start of the bytes block (array) with len length._ |
 | enum  | [**CommandType**](#enum-commandtype)  <br>_Enum for types of different commands that can be proccessed by program._ |
+| enum  | [**ErrorCode**](#enum-errorcode)  <br>_Enum for error exit codes._ |
 | enum  | [**FSM**](#enum-fsm)  <br>_Enum for FSM state of program._ |
 | typedef enum [**CommandType**](#enum-commandtype) | [**cmd\_t**](#typedef-cmd_t)  <br>_Enum for types of different commands that can be proccessed by program._ |
+| typedef enum [**ErrorCode**](#enum-errorcode) | [**err\_code**](#typedef-err_code)  <br>_Enum for error exit codes._ |
 | typedef enum [**FSM**](#enum-fsm) | [**fsm\_t**](#typedef-fsm_t)  <br>_Enum for FSM state of program._ |
 
 ## Functions
@@ -1453,6 +1563,7 @@ Copyright (c) 2024
 |  bool | [**getWord**](#function-getword) ([**BytesBlock**](#struct-bytesblock) \*block, char \*startOfLastWord, size\_t bufferSize) <br>_Returns word from string. Look from first character until blank character is found._ |
 |  int | [**isEndingCharacter**](#function-isendingcharacter) (char input) <br>_Returns true if character is considered as an ending character for command._ |
 |  long | [**skipBlankCharsInString**](#function-skipblankcharsinstring) (char \*string, size\_t len) <br>_Skips blank character until a first non empty character is found._ |
+|  bool | [**strcmpCaseIns**](#function-strcmpcaseins) (char \*str1, char \*str2, size\_t len) <br>_Compares two string whenever they are same, letters are not case sensitive._ |
 |  void | [**stringReplace**](#function-stringreplace) (char \*dst, char \*src, size\_t len) <br>_Replaces bytes in dst with bytes from src up to len lenght._ |
 |  [**cmd\_t**](#typedef-cmd_t) | [**uchar2CommandType**](#function-uchar2commandtype) (unsigned char input) <br>_Converts unsigned char into an CommandType._ |
 
@@ -1508,8 +1619,24 @@ enum CommandType {
     cmd_MSG,
     cmd_ERR,
     cmd_EXIT,
+    cmd_MISSING,
     cmd_NONE,
     cmd_CONVERSION_ERR
+};
+```
+
+### enum `ErrorCode`
+
+_Enum for error exit codes._
+```c
+enum ErrorCode {
+    err_NO_ERR = 0,
+    err_MISING_PROGRAM_ARG = 1,
+    err_NETWORK_INIT = 11,
+    err_COMMUNICATION = 21,
+    err_INTERNAL_UNEXPECTED_RESULT = 97,
+    err_INTERNAL_BAD_ARG = 98,
+    err_MEMORY_FAIL = 99
 };
 ```
 
@@ -1526,9 +1653,10 @@ enum FSM {
     fsm_OPEN,
     fsm_JOIN_ATEMPT,
     fsm_EMPTY_Q_BYE,
-    fsm_BYE_RECV,
     fsm_ERR,
+    fsm_ERR_W84_CONF,
     fsm_SIGINT_BYE,
+    fsm_END_W84_CONF,
     fsm_END
 };
 ```
@@ -1538,6 +1666,13 @@ enum FSM {
 _Enum for types of different commands that can be proccessed by program._
 ```c
 typedef enum CommandType cmd_t;
+```
+
+### typedef `err_code`
+
+_Enum for error exit codes._
+```c
+typedef enum ErrorCode err_code;
 ```
 
 ### typedef `fsm_t`
@@ -1610,6 +1745,19 @@ int errHandling (
 **Returns:**
 
 int Returns 0 (for anti-compiler errors)
+
+
+
+**Parameters:**
+
+
+* `msg` [**Message**](#struct-message) to be printed
+* `errorCode` Error code that will be used as exit code 
+
+
+**Returns:**
+
+int Returns 0
 ### function `findBlankCharInString`
 
 _Finds first blank character (spaces ' ' and tabulators '\t') in string and returns index of last character before blank character._
@@ -1742,6 +1890,39 @@ long skipBlankCharsInString (
 **Returns:**
 
 long
+### function `strcmpCaseIns`
+
+_Compares two string whenever they are same, letters are not case sensitive._
+```c
+bool strcmpCaseIns (
+    char *str1,
+    char *str2,
+    size_t len
+) 
+```
+
+
+Example: strcmpCaseIns("aaa", "aAA", 3) // will be true
+
+
+
+**Parameters:**
+
+
+* `str1` pointer to the first string 
+* `str2` pointer to the second string 
+* `len` number of characters that will be compared 
+
+
+**Returns:**
+
+true String are same or are same but with different case "sensitiveness" 
+
+
+
+**Returns:**
+
+false String are not same
 ### function `stringReplace`
 
 _Replaces bytes in dst with bytes from src up to len lenght._
@@ -1865,8 +2046,9 @@ Copyright (c) 2024
 | Type | Name |
 | ---: | :--- |
 |  void \* | [**protocolReceiver**](#function-protocolreceiver) (void \*vargp) <br>_Initializes protocol receiving functionality._ |
+|  void | [**sendBye**](#function-sendbye) ([**ProgramInterface**](#struct-programinterface) \*progInt) <br>_Creates BYE message and sends it to server._ |
 |  void | [**sendConfirm**](#function-sendconfirm) ([**Buffer**](#struct-buffer) \*serverResponse, [**Buffer**](#struct-buffer) \*receiverSendMsgs, [**ProgramInterface**](#struct-programinterface) \*progInt, [**msg\_flags**](#typedef-msg_flags) flags) <br>_Create confirm protocol._ |
-|  void | [**sendError**](#function-senderror) ([**Buffer**](#struct-buffer) \*serverResponse, [**Buffer**](#struct-buffer) \*receiverSendMsgs, [**ProgramInterface**](#struct-programinterface) \*progInt, const char \*message) <br>_Create err protocol._ |
+|  void | [**sendError**](#function-senderror) ([**Buffer**](#struct-buffer) \*receiverSendMsgs, [**ProgramInterface**](#struct-programinterface) \*progInt, const char \*message) <br>_Create err protocol._ |
 
 
 
@@ -1891,6 +2073,20 @@ void * protocolReceiver (
 **Returns:**
 
 void\*
+### function `sendBye`
+
+_Creates BYE message and sends it to server._
+```c
+void sendBye (
+    ProgramInterface *progInt
+) 
+```
+
+
+**Parameters:**
+
+
+* `progInt` Pointer to program interface
 ### function `sendConfirm`
 
 _Create confirm protocol._
@@ -1916,7 +2112,6 @@ void sendConfirm (
 _Create err protocol._
 ```c
 void sendError (
-    Buffer *serverResponse,
     Buffer *receiverSendMsgs,
     ProgramInterface *progInt,
     const char *message
@@ -1927,7 +2122,6 @@ void sendError (
 **Parameters:**
 
 
-* `serverResponse` [**Buffer**](#struct-buffer) from which will referenceID be taken
 * `receiverSendMsgs` [**Buffer**](#struct-buffer) to which should message be stored
 * `progInt` Pointer to Program Interface 
 * `message` [**Message**](#struct-message) to be sended to the server
